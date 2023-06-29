@@ -1234,7 +1234,11 @@ class Application(tk.Tk):
         # PSCAD V5
         # versions = mhi.pscad.versions()  # get installed versions
         # pscad = mhi.pscad.launch(version='4.6.3', x64=True)  # does not work, even with 4.6.2 or 4.6.1
-        pscad = mhi.pscad.application()  # use PSCAD instance already open or launch a new instance
+        try:
+            pscad = mhi.pscad.application()  # use PSCAD instance already open or launch a new instance
+        except Exception as e:
+            raise Exception(e.args[0] + ". PSCAD V5.X is not installed on this computer or is unlicensed."
+                                        " Only the wrapper file is generated")
 
         workspace = pscad.workspace()  # Get workspace
         project = workspace.create_project(1, self.Model_Name_Shortened, self.dll_folder_path)
