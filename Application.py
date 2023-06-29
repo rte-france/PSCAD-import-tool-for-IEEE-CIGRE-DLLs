@@ -98,7 +98,31 @@ class Application(tk.Tk):
         #self.button_generate_pscad_model.invoke()  # Appuyer sur le bouton
         # self.generate_pscad_model()
 
+    def clean_attributes(self):
+        self.in_names = []
+        self.in_fortran_types = []
+        self.in_pscad_types = []
+        self.in_width = []
+
+        self.out_names = []
+        self.out_fortran_types = []
+        self.out_pscad_types = []
+        self.out_width = []
+
+        self.param_names = []
+        self.param_fortran_types = []
+        self.param_pscad_types = []
+        self.param_descriptions = []
+        self.param_units = []
+        self.param_default_values = []
+        self.param_min_values = []
+        self.param_max_values = []
+
+        self.list_label_errors = []
+
     def generate_pscad_model(self):
+        self.clean_attributes()
+
         self.dll_file_path = self.entry_dll_file_path.get()
         self.dll_file_name = os.path.basename(self.dll_file_path)
         self.dll_folder_path = os.path.dirname(self.dll_file_path)  # get folder path of a file
@@ -130,7 +154,7 @@ class Application(tk.Tk):
             type_modelparameters = self.generate_type('ModelParameters', self.param_names, self.param_fortran_types)
             finterface_function_prototype = self.generate_finterface_function_prototype()
             variables_from_pscad = self.generate_variables_from_pscad()
-            storfloat_code = self.generate_storfloat_code()
+            # storfloat_code = self.generate_storfloat_code()
             pointers_to_state_arrays = self.generate_pointers_to_state_arrays()
             """params_pscad_to_new_struct = self.generate_conversion(self.param_names, None, self.param_fortran_types,
                                                                   self.param_pscad_types, False, True, 'PARAMETERS_new')
@@ -171,6 +195,8 @@ class Application(tk.Tk):
 
             inputs_pscad_to_new_struct = inputs_pscad_to_new_struct.replace('\t', '\t\t')  # double tab for this part
 
+            storfloat_to_storf = self.generate_storfloat_to_storf()
+
             outputs_new_to_storf = self.generate_conversion(self.out_names, self.out_width,
                                                             self.out_fortran_types,
                                                             self.out_pscad_types, None, False, 'OUTPUTS_new')
@@ -179,21 +205,12 @@ class Application(tk.Tk):
                                                             self.out_fortran_types,
                                                             self.out_pscad_types, '_pscad', False, 'OUTPUTS_new')
 
-
-
-
-
-
-
-
-
-
-
-            buffer = self.create_fortran_code(storfloat_declaration, type_modelinputs, type_modeloutputs, type_modelparameters,
-                                              finterface_function_prototype, variables_from_pscad, storfloat_code,
+            buffer = self.create_fortran_code(type_modelinputs, type_modeloutputs, type_modelparameters,
+                                              finterface_function_prototype, variables_from_pscad,
                                               pointers_to_state_arrays, params_pscad_to_new_struct,
                                               outputs_storf_to_new_struct, outputs_init_pscad_to_new_struct,
-                                              inputs_pscad_to_new_struct, outputs_new_to_storf, outputs_new_to_pscad)
+                                              inputs_pscad_to_new_struct, storfloat_to_storf, outputs_new_to_storf,
+                                              outputs_new_to_pscad)
 
             with open(self.fortran_interface_file_path, 'w') as f:
                 f.write(buffer)  # allow rewrite on existing file
@@ -362,7 +379,8 @@ class Application(tk.Tk):
                 buffer += '\t' + var_pscad_types[i] + ', INTENT(' + intent_value + ') :: ' + var_names[i] + '_pscad\n'
         return buffer
 
-    def generate_storfloat_code(self):
+    # No more used
+    """def generate_storfloat_code(self):
         buffer = ''
         NumFloatStates = self.Model_Info.NumFloatStates
         if NumFloatStates > 0:
@@ -377,7 +395,7 @@ class Application(tk.Tk):
                       '\t\tNSTORFLOAT = 1\n' \
                       '\tENDIF'
 
-        return buffer
+        return buffer"""
 
     def generate_pointers_to_state_arrays(self):
         buffer = ''
@@ -385,11 +403,21 @@ class Application(tk.Tk):
         if self.Model_Info.NumIntStates > 0:
             buffer += '\tpInstance%IntStates    = c_loc(STORI(NSTORI))\n'
         if self.Model_Info.NumFloatStates > 0:
-            buffer += '\tpInstance%FloatStates  = c_loc(STORFLOAT(NSTORFLOAT))\n'
+            buffer += '\tpInstance%FloatStates  = c_loc(STORFLOAT(1))\n'
         if self.Model_Info.NumDoubleStates > 0:
-            buffer += '\tpInstance%DoubleStates  = c_loc(STORF(NSTORF + 1)) !DoubleStates just after Next_t_model\n'
+            buffer += '\tpInstance%DoubleStates  = c_loc(STORF(NSTORF + 1 + ' + str(self.Model_Info.NumFloatStates) + ')) !DoubleStates just after Next_t_model and FloatStates\n'
+
+        for i in range(self.Model_Info.NumFloatStates):
+            buffer += '\tSTORFLOAT(' + str(i+1) + ') = STORF(NSTORF + 1 + ' + str(i) + ') ! DOUBLE PRECISION (REAL*8) to REAL*4: possible accuracy lost\n'
 
         buffer += '\n'
+        return buffer
+
+    def generate_storfloat_to_storf(self):
+        buffer = ''
+        for i in range(self.Model_Info.NumFloatStates):
+            buffer += '\tSTORF(NSTORF + 1 + ' + str(i) + ') = STORFLOAT(' + str(i + 1) + ')\n'
+
         return buffer
 
     # names is self.in_names or self.param_names or self.out_names
@@ -422,10 +450,13 @@ class Application(tk.Tk):
                     part_1 = part_1_base + '(' + str(j) + ')'
 
                 if suffix is None:  # use STORF
-                    if self.Model_Info.NumDoubleStates > 0:
+                    """if self.Model_Info.NumDoubleStates > 0:
                         part_2 = 'STORF(NSTORF + 2 + ' + str(i_storf) + ')'
                     else:
-                        part_2 = 'STORF(NSTORF + 1 + ' + str(i_storf) + ')'
+                        part_2 = 'STORF(NSTORF + 1 + ' + str(i_storf) + ')'"""
+
+                    part_2 = 'STORF(NSTORF + 1 + ' + str(self.Model_Info.NumFloatStates) + ' + ' + \
+                             str(self.Model_Info.NumDoubleStates) + ' + ' + str(i_storf) + ')'
                     i_storf += 1
 
                     if fill_new_struct:  # STORF on the right side
@@ -706,11 +737,11 @@ class Application(tk.Tk):
     #     f.write('encoded_file = b"' + encoded_file.decode('ascii') + '"')
     # from my_file import encoded_file
     # fichier_decoded = base64.b64decode(encoded_file)
-    def create_fortran_code(self, storfloat_declaration, type_modelinputs, type_modeloutputs, type_modelparameters,
-                            finterface_function_prototype, variables_from_pscad, storfloat_code,
+    def create_fortran_code(self, type_modelinputs, type_modeloutputs, type_modelparameters,
+                            finterface_function_prototype, variables_from_pscad,
                             pointers_to_state_arrays, params_pscad_to_new_struct, outputs_storf_to_new_struct,
-                            outputs_init_pscad_to_new_struct, inputs_pscad_to_new_struct, outputs_new_to_storf,
-                            outputs_new_to_pscad):
+                            outputs_init_pscad_to_new_struct, inputs_pscad_to_new_struct, storfloat_to_storf,
+                            outputs_new_to_storf, outputs_new_to_pscad):
         bf = ''
         bf += '\t! Common module for each instance of ' + self.Model_Name_Shortened + ' model\n' \
               '\tMODULE ' + self.Model_Name_Shortened + '_MOD\n\n' \
@@ -721,11 +752,8 @@ class Application(tk.Tk):
               '\tLOGICAL :: FIRST_CALL_THIS_FILE = .TRUE.  ! Used to allocate some arrays and set pointers to DLL functions\n' \
               '\tDOUBLE PRECISION   :: DELT_Model      ! The sampling time (Sec) needed by this model\n' \
               '\tINTEGER :: N_INSTANCE = 0  ! nb instances of this specific IEEE CIGRE Model, useful at last time-step to use FreeLibrary\n' \
-              '\tINTEGER :: N_CALL_LAST_STEP = 0  ! nb call at last step, useful at last time-step to use FreeLibrary\n\n'
-
-        bf += storfloat_declaration  # cen be empty
-
-        bf += '\t!---------------------------------\n'\
+              '\tINTEGER :: N_CALL_LAST_STEP = 0  ! nb call at last step, useful at last time-step to use FreeLibrary\n\n' \
+              '\t!---------------------------------\n'\
               '\t!--- Types common to each model --\n'\
               '\t!---------------------------------\n'\
               '\tTYPE IEEE_Cigre_DLLInterface_Instance\n'\
@@ -934,13 +962,14 @@ class Application(tk.Tk):
               '\tTYPE(c_ptr)    :: DLLModelName_cp                  ! The C pointer to the DLL ModelName\n' \
               '\tTYPE(c_ptr)    :: DLLModelVersion_cp               ! The C pointer to the DLL ModelVersion\n' \
               '\tCHARACTER*50   :: OrigModelName       = "' + self.Model_Name + '"    ! Model name, written by the DLL Import tool\n' \
-              '\tCHARACTER*50   :: OrigModelVersion    = "' + self.DLLInterfaceVersionStr + '"  ! Model version, written by the DLL Import tool\n\n' \
-              '\t! For PSCAD, these variables are extracted from the common blocks accessed by INCLUDE statements at the top of this code\n' \
-              '\tIUNIT          = 6         ! Do Write(6,*) messages\n\n'
+              '\tCHARACTER*50   :: OrigModelVersion    = "' + self.DLLInterfaceVersionStr + '"  ! Model version, written by the DLL Import tool\n'
 
-        bf += storfloat_code + '\n\n'
+        if self.Model_Info.NumFloatStates > 0:
+            bf += '\tREAL*4, DIMENSION(' + str(self.Model_Info.NumFloatStates) + ') :: STORFLOAT  ! To store IEEE CIGRE FloatStates array\n'
 
-        bf += '\t! Initialize Next_t_model.\n' \
+        bf += '\n' \
+              '\tIUNIT          = 6         ! Do Write(6,*) messages\n\n' \
+              '\t! Initialize Next_t_model.\n' \
               '\t! TIMEZERO is True when time t = 0.0\n' \
               '\t! If it\'s FIRSTSTEP but not TIMEZERO => Next_t_model = STORF(NSTORF)\n' \
               '\tNext_t_model  = STORF(NSTORF)\n' \
@@ -1043,8 +1072,11 @@ class Application(tk.Tk):
               '\t! --------------------------------\n' \
               '\t! Put back into storage\n' \
               '\t! --------------------------------\n\n' \
-              '\tSTORF(NSTORF) = Next_t_model\n\n' \
-              '\t! Outputs back into storage\n'
+              '\tSTORF(NSTORF) = Next_t_model\n\n'
+
+        bf += storfloat_to_storf + '\n'
+
+        bf += '\t! Outputs back into storage\n'
 
         bf += outputs_new_to_storf + '\n'
 
@@ -1063,21 +1095,17 @@ class Application(tk.Tk):
               '\t\t\tretValFreeLib = FreeLibrary(dllHandle) ! Free DLL\n' \
               '\t\tENDIF\n' \
               '\tENDIF\n\n' \
-              '\t! Increment STORx pointers (this must be done every time step)\n'
-
-        NumFloatStates = self.Model_Info.NumFloatStates
-        if NumFloatStates > 0:
-            bf += '\tNSTORFLOAT = NSTORFLOAT + ' + str(NumFloatStates) + ' ! # of float states used in the dll\n'
-
-        bf += '\t! Note memory for these vectors must be allocated using #STORAGE syntax in the PSCAD component definition\n'
+              '\t! Increment STORx pointers (this must be done every time step)\n' \
+              '\t! Note memory for these vectors must be allocated using #STORAGE syntax in the PSCAD component definition\n'
 
         NumIntStates = self.Model_Info.NumIntStates
         if NumIntStates > 0:
             bf += '\tNSTORI = NSTORI + ' + str(NumIntStates) + ' ! # of integer states used in the dll\n'
 
-        nb_outputs_total = sum(self.out_width)
+        NumFloatStates = self.Model_Info.NumFloatStates
         NumDoubleStates = self.Model_Info.NumDoubleStates
-        bf += '\tNSTORF = NSTORF + 1 + ' + str(nb_outputs_total) + ' + ' + str(NumDoubleStates) + ' ! STORF contains Next_t_model, outputs and double states\n\n'
+        nb_outputs_total = sum(self.out_width)
+        bf += '\tNSTORF = NSTORF + 1 + ' + str(NumFloatStates) + ' + ' + str(NumDoubleStates) + ' + ' + str(nb_outputs_total) + ' ! STORF contains Next_t_model, float states, double states, outputs \n\n'
 
         bf += '\tEND\n\n'
         return bf
@@ -1310,7 +1338,7 @@ class Application(tk.Tk):
         # title inside the component
         label_height = 18
         total_width = 200
-        y_offset = 3
+        y_offset = 1
         if len(self.Model_Name_Shortened) <= 25:
             wizard.graphics.text(self.Model_Name_Shortened, total_width // 2 - 10, y_offset * label_height)
         else:
@@ -1322,6 +1350,7 @@ class Application(tk.Tk):
 
         y_offset += 1
         wizard.graphics.text("IEEE CIGRE DLL", total_width//2 - 10, y_offset * label_height)
+        y_offset += 1
         wizard.graphics.text("", total_width, y_offset * label_height)  # to set the width of the component
 
         ##################################################################################
@@ -1334,8 +1363,9 @@ class Application(tk.Tk):
             script += '\t#STORAGE INTEGER:' + str(NumIntStates) + '\n'
 
         nb_outputs_total = sum(self.out_width)
+        NumFloatStates = self.Model_Info.NumFloatStates
         NumDoubleStates = self.Model_Info.NumDoubleStates
-        storage_double = 1 + nb_outputs_total + NumDoubleStates
+        storage_double = 1 + NumFloatStates + NumDoubleStates + nb_outputs_total
         script += '\t#STORAGE REAL:' + str(storage_double) + '\n'
         script += '\n'
 
