@@ -220,10 +220,15 @@ class Application(tk.Tk):
         except Exception as e:
             self.display_error(e.args[0])
 
+    def remove_forbidden_char(self, str):
+        str = str.replace(' ', '_')
+        return str
+
     def fill_in_out_param_lists(self):
         for i in range(0, self.Model_Info.NumInputPorts):
             signal = self.Model_Info.InputPortsInfo[i]
             name = signal.Name.decode("utf-8")
+            name = self.remove_forbidden_char(name)
             datatype = signal.DataType  # ex: IEEE_Cigre_DLLInterface_DataType_int8_T
             self.in_names.append(name)
             try:
@@ -240,6 +245,7 @@ class Application(tk.Tk):
         for i in range(0, self.Model_Info.NumOutputPorts):
             signal = self.Model_Info.OutputPortsInfo[i]
             name = signal.Name.decode("utf-8")
+            name = self.remove_forbidden_char(name)
             datatype = signal.DataType  # ex: IEEE_Cigre_DLLInterface_DataType_int8_T
             self.out_names.append(name)
             try:
@@ -256,6 +262,7 @@ class Application(tk.Tk):
         for i in range(0, self.Model_Info.NumParameters):
             parameter = self.Model_Info.ParametersInfo[i]
             name = parameter.Name.decode("utf-8")
+            name = self.remove_forbidden_char(name)
             datatype = parameter.DataType  # ex: IEEE_Cigre_DLLInterface_DataType_int8_T
             description = parameter.Description.decode("utf-8")
             unit = parameter.Unit.decode("utf-8")
