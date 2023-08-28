@@ -969,8 +969,8 @@ class Application(tk.Tk):
               '\tTYPE(ModelParameters) :: PARAMETERS_new\n' \
               '\t! To check if the DLL has changed, the name and version will be checked against the name and version extracted from the DLL\n' \
               '\tTYPE(c_ptr)    :: DLLModelName_cp  ! The C pointer to the DLL ModelName\n' \
-              '\tINTEGER(KIND=c_int8_t), DIMENSION(4) :: DLLInterfaceVersion  ! The DLL interface version of the DLL\n' \
               '\tCHARACTER*50   :: OrigModelName       = "' + self.Model_Name + '"    ! Model name, written by the DLL Import tool\n' \
+              '\tINTEGER(KIND=c_int8_t), DIMENSION(4) :: DLLInterfaceVersion  ! The DLL interface version of the DLL\n' \
               '\tINTEGER(KIND=c_int8_t), DIMENSION(4) :: OrigDLLInterfaceVersion = ' + str(self.DLLInterfaceVersion) + '  ! DLL interface version, written by the DLL Import tool\n'
               #'\tINTEGER(KIND=c_int8_t), DIMENSION(4) :: OrigDLLInterfaceVersion = [' + ', '.join(map(str, self.DLLInterfaceVersion)) + ']  ! DLL interface version, written by the DLL Import tool\n'
               #'\tCHARACTER*50   :: OrigModelVersion    = "' + self.DLLInterfaceVersionStr + '"  ! Model version, written by the DLL Import tool\n'
@@ -1203,7 +1203,9 @@ class Application(tk.Tk):
             raise Exception('ieee_cigre_datatype_to_pscad_param_type_str : error in dataType_enum: ' + str(datatype))
 
     def get_dll_interface_version(self):
-        self.DLLInterfaceVersion = self.Model_Info.DLLInterfaceVersion  # ex: [1, 1, 0, 0]
+        #self.DLLInterfaceVersion = self.Model_Info.DLLInterfaceVersion  # ex: [1, 1, 0, 0]
+        self.DLLInterfaceVersion = [int(x) for x in self.Model_Info.DLLInterfaceVersion]  # ex: [1, 1, 0, 0]
+
         # example: 1.1.0.0
         #self.DLLInterfaceVersionStr = str(DLLInterfaceVersion[0]) + '.' + str(DLLInterfaceVersion[1]) + '.' + str(
         #    DLLInterfaceVersion[2]) + '.' + str(DLLInterfaceVersion[3])
