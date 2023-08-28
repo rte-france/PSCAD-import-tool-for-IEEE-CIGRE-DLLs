@@ -1018,7 +1018,7 @@ class Application(tk.Tk):
               '\t\tDELT_Model = Model_Info_fp.FixedStepBaseSampleTime\n\n' \
               '\t\t! Error if the time step required by the controls is smaller than the simulation time step\n' \
               '\t\tIF ( DELT_Model .LT. DELT) THEN\n' \
-              '\t\t\tWRITE(IUNIT,*) "*** Error - The SCRX9 controls require a time-step of ", DELT_Model\n' \
+              '\t\t\tWRITE(IUNIT,*) "*** Error - The ' + self.Model_Name + ' controls require a time-step of ", DELT_Model\n' \
               '\t\t\tWRITE(IUNIT,*) "The current program time-step used is ", DELT\n' \
               '\t\t\tWRITE(IUNIT,*) "The controller sample time must be larger than the simulation time-step."\n' \
               '\t\t\tSTOP\n' \
