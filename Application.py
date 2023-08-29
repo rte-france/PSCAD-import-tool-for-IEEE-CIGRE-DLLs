@@ -965,7 +965,6 @@ class Application(tk.Tk):
               '\tCHARACTER*(*), INTENT(IN) :: DLL_Path\n\n' \
               '\t! Local variables\n' \
               '\tINTEGER   :: i  ! Used for loops\n' \
-              '\tINTEGER   :: IUNIT  ! Unit to use for Write Statements\n' \
               '\tINTEGER   :: retval  ! return value of DLL functions\n' \
               '\tINTEGER   :: retValFreeLib     ! Only for FreeLibrary\n' \
               '\tTYPE(IEEE_Cigre_DLLInterface_Instance) :: pInstance\n' \
