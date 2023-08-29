@@ -61,6 +61,7 @@ class Application(tk.Tk):
         self.param_pscad_types = []  # For an IEEE CIGRE DLL, it can be INTEGER, REAL or CHARACTER(*)
         self.param_descriptions = []
         self.param_units = []
+        self.param_fixedValue = []  # int
         self.param_default_values = []
         self.param_min_values = []
         self.param_max_values = []
@@ -176,6 +177,8 @@ class Application(tk.Tk):
                                                             self.out_fortran_types,
                                                             self.out_pscad_types, False, False, 'OUTPUTS_new')"""
 
+            params_change_check = self.generate_parameters_change_check()
+
             params_pscad_to_new_struct = self.generate_conversion(self.param_names, None, self.param_fortran_types,
                                                                   self.param_pscad_types, '_pscad', True, 'PARAMETERS_new')
             outputs_storf_to_new_struct = self.generate_conversion(self.out_names, self.out_width,
@@ -208,7 +211,7 @@ class Application(tk.Tk):
 
             buffer = self.create_fortran_code(type_modelinputs, type_modeloutputs, type_modelparameters,
                                               finterface_function_prototype, variables_from_pscad,
-                                              pointers_to_state_arrays, params_pscad_to_new_struct,
+                                              pointers_to_state_arrays, params_change_check, params_pscad_to_new_struct,
                                               outputs_storf_to_new_struct, outputs_init_pscad_to_new_struct,
                                               inputs_pscad_to_new_struct, storfloat_to_storf, outputs_new_to_storf,
                                               outputs_new_to_pscad)
@@ -267,6 +270,7 @@ class Application(tk.Tk):
             datatype = parameter.DataType  # ex: IEEE_Cigre_DLLInterface_DataType_int8_T
             description = parameter.Description.decode("utf-8")
             unit = parameter.Unit.decode("utf-8")
+            fixedValue = parameter.FixedValue  # is int
             default_value = self.get_parameter_default_min_or_max_value(parameter.DefaultValue, datatype)
             # IEEE CIGRE DLL allows min max value for strings
             min_value = self.get_parameter_default_min_or_max_value(parameter.MinValue, datatype)
@@ -285,6 +289,7 @@ class Application(tk.Tk):
             self.param_pscad_types.append(pscad_type_str)
             self.param_descriptions.append(description)
             self.param_units.append(unit)
+            self.param_fixedValue.append(fixedValue)
             self.param_default_values.append(default_value)
             self.param_min_values.append(min_value)
             self.param_max_values.append(max_value)
@@ -404,6 +409,30 @@ class Application(tk.Tk):
                       '\tENDIF'
 
         return buffer"""
+
+    def generate_parameters_change_check(self):
+        buffer = ''
+
+        #param_names_that_change = []
+        l1 = []  # will be ['PARAMETERS_new%param1 /= param1_pscad', 'PARAMETERS_new%param2 /= param2_pscad', ...]
+        for i, value in enumerate(self.param_fixedValue):
+            if value == 0:  # fixedValue = 0, means parameters can be modified at any time
+                #param_names_that_change.append(self.param_names[i])
+                l1.append('PARAMETERS_new%' + self.param_names[i] + ' /= ' + self.param_names[i] + '_pscad')
+
+        # Add OR between elements and make a string
+        check_str = ''
+        if len(l1) > 0:
+            check_str = ' .OR. '.join(l1)
+
+        if check_str != '':
+            buffer += '\t! Check if parameters have changed. Usefull to call Model_CheckParameters again or not\n'
+            buffer += '\t! Check only parameters that may change (with .FixedValue = 0)\n'
+            buffer += '\tIF (' + check_str + ') THEN\n'
+            buffer += '\t\tParametersChanged = .TRUE.\n'
+            buffer += '\tENDIF\n\n'
+
+        return buffer
 
     def generate_pointers_to_state_arrays(self):
         buffer = ''
@@ -747,7 +776,7 @@ class Application(tk.Tk):
     # fichier_decoded = base64.b64decode(encoded_file)
     def create_fortran_code(self, type_modelinputs, type_modeloutputs, type_modelparameters,
                             finterface_function_prototype, variables_from_pscad,
-                            pointers_to_state_arrays, params_pscad_to_new_struct, outputs_storf_to_new_struct,
+                            pointers_to_state_arrays, params_change_check, params_pscad_to_new_struct, outputs_storf_to_new_struct,
                             outputs_init_pscad_to_new_struct, inputs_pscad_to_new_struct, storfloat_to_storf,
                             outputs_new_to_storf, outputs_new_to_pscad):
         bf = ''
@@ -1047,8 +1076,11 @@ class Application(tk.Tk):
               '\t\tEND DO\n\n' \
               '\t\tFIRST_CALL_THIS_FILE = .FALSE.\n\n' \
               '\tENDIF\n\n' \
-              '\t! Assign parameters from the simulation tool side to model parameters\n' \
-              '\t! Do it at every call, parameters in PSCAD can changed during the simulation\n'
+
+        bf += params_change_check
+
+        bf += '\t! Assign parameters from the simulation tool side to model parameters\n' \
+              '\t! Done before Model_FirstCall because this function may use the parameters\n'
 
         bf += params_pscad_to_new_struct + '\n'
 
@@ -1056,7 +1088,9 @@ class Application(tk.Tk):
 
         bf += outputs_storf_to_new_struct + '\n'
 
-        bf += '\t! FIRSTSTEP is True for first step starting from the Data file or Snapshot file\n' \
+        bf += '\t! FIRSTSTEP is True for first step starting from the Data file or Snapshot file.\n' \
+              '\t! This part is outside the check if the model sampling time has been reached, by prevention.\n' \
+              '\t! -> We need to check if TIME .GE. Next_t_model is called when starting from snapshot.\n' \
               '\tIF ( FIRSTSTEP ) THEN\n' \
               '\t\tN_INSTANCE = N_INSTANCE + 1\n' \
               '\t\tretval = Model_FirstCall(pInstance)\n' \
@@ -1065,9 +1099,11 @@ class Application(tk.Tk):
               '\t! Check if the model sampling time has been reached\n' \
               '\tIF ( TIME .GE. Next_t_model - EQUALITY_PRECISION ) THEN\n\n' \
               '\t\t! Model_CheckParameters must be just after Model_FirstCall\n' \
-              '\t\t! Do it at every call, parameters in PSCAD can changed during the simulation\n' \
-              '\t\tretval = Model_CheckParameters(pInstance)\n' \
-              '\t\tcall Handle_Message(pInstance, retval)\n\n' \
+              '\t\t! Do it only if parameters have changed\n' \
+              '\t\tIF (ParametersChanged) THEN\n' \
+              '\t\t\tretval = Model_CheckParameters(pInstance)\n' \
+              '\t\t\tcall Handle_Message(pInstance, retval)\n' \
+              '\t\tENDIF\n\n' \
               '\t\t! Determine when the model should be initializing\n' \
               '\t\tIsInitializing = .FALSE.\n' \
               '\t\t! IF ( TIME .LE. TRelease ) should also work\n' \
