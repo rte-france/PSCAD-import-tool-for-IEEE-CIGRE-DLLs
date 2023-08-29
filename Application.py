@@ -135,7 +135,7 @@ class Application(tk.Tk):
             self.get_dll_interface_version()
             self.check_dll_interface_version()
             self.Model_Name = self.Model_Info.ModelName.decode("utf-8")
-            self.Model_Name_Shortened = self.Model_Name[:50]  # take 50 char
+            self.Model_Name_Shortened = self.Model_Name[:50]  # take max 50 char
             self.fortran_interface_file_name = self.Model_Name_Shortened + '_FINTERFACE_PSCAD.f90'
             self.fortran_interface_file_path = self.dll_folder_path + '\\' + self.fortran_interface_file_name
 
@@ -751,7 +751,7 @@ class Application(tk.Tk):
                             outputs_init_pscad_to_new_struct, inputs_pscad_to_new_struct, storfloat_to_storf,
                             outputs_new_to_storf, outputs_new_to_pscad):
         bf = ''
-        bf += '\t! Common module for each instance of ' + self.Model_Name_Shortened + ' model\n' \
+        bf += ('\t! Common module for each instance of ' + self.Model_Name_Shortened + ' model\n' \
               '\tMODULE ' + self.Model_Name_Shortened + '_MOD\n\n' \
               '\tUSE, INTRINSIC :: iso_c_binding, only : c_ptr, c_double, c_int8_t, c_int32_t\n' \
               '\tUSE IFWIN ! To use INTEGER(handle)\n\n' \
@@ -760,7 +760,10 @@ class Application(tk.Tk):
               '\tLOGICAL :: FIRST_CALL_THIS_FILE = .TRUE.  ! Used to allocate some arrays and set pointers to DLL functions\n' \
               '\tDOUBLE PRECISION   :: DELT_Model      ! The sampling time (Sec) needed by this model\n' \
               '\tINTEGER :: N_INSTANCE = 0  ! nb instances of this specific IEEE CIGRE Model, useful at last time-step to use FreeLibrary\n' \
-              '\tINTEGER :: N_CALL_LAST_STEP = 0  ! nb call at last step, useful at last time-step to use FreeLibrary\n\n' \
+              '\tINTEGER :: N_CALL_LAST_STEP = 0  ! nb call at last step, useful at last time-step to use FreeLibrary\n' \
+              '\tINTEGER   :: IUNIT = 6 ! Unit to use for Write Statements\n' \
+              '\tCHARACTER*' + str(len(self.Model_Name)) + '   :: OrigModelName = "' + self.Model_Name + '"  ! Model name, written by the DLL Import tool\n' \
+              '\tCHARACTER*' + str(len(self.Model_Name_Shortened)) + '   :: OrigModelNameShortened = "' + self.Model_Name_Shortened + '"  ! Model name shortened to 50 char max, written by the DLL Import tool\n\n' \
               '\t!---------------------------------\n'\
               '\t!--- Types common to each model --\n'\
               '\t!---------------------------------\n'\
@@ -804,7 +807,7 @@ class Application(tk.Tk):
               '\t!--- Types specific to a model ---\n' \
               '\t!---------------------------------\n' \
               '\t! See Fortran C equivalent here: https://docs.oracle.com/cd/E19957-01/805-4940/z40009104412/index.html\n' \
-              '\t! We could also used types with kind type parameters from the ISO_C_BINDING module\n'
+              '\t! We could also used types with kind type parameters from the ISO_C_BINDING module\n')
 
         bf += type_modelinputs + '\n\n' + type_modeloutputs + '\n\n' + type_modelparameters + '\n\n'
 
@@ -877,11 +880,9 @@ class Application(tk.Tk):
               '\tPOINTER(pointer_Model_Iterate,         Model_Iterate)\n\n' \
               '\tcontains ! For functions ans subroutines\n\n' \
               '\t\t! Write LastErrorMessage according to retval (return value of the DLL function)\n' \
-              '\t\tsubroutine Handle_Message(pInstance, modelName, IUNIT, retval)\n\n' \
+              '\t\tsubroutine Handle_Message(pInstance, retval)\n\n' \
               '\t\t\timplicit none\n\n' \
               '\t\t\tTYPE(IEEE_Cigre_DLLInterface_Instance), INTENT(IN) :: pInstance\n' \
-              '\t\t\tCHARACTER*(*), INTENT(IN) :: modelName\n' \
-              '\t\t\tINTEGER, INTENT(IN) :: IUNIT\n' \
               '\t\t\tINTEGER, INTENT(IN) :: retval\n' \
               '\t\t\tCHARACTER(:), ALLOCATABLE :: msg\n\n' \
               '\t\t\t!INTEGER, PARAMETER :: IEEE_Cigre_DLLInterface_Return_OK = 0\n' \
@@ -889,10 +890,16 @@ class Application(tk.Tk):
               '\t\t\tINTEGER, PARAMETER :: IEEE_Cigre_DLLInterface_Return_Error = 2\n\n' \
               '\t\t\tIF (retval .eq. IEEE_Cigre_DLLInterface_Return_Error) THEN\n' \
               '\t\t\t\tmsg = Get_Fortran_String(pInstance%LastErrorMessage)\n' \
-              '\t\t\t\tIF (LEN(msg) .GT. 1) WRITE(IUNIT,*) "Error in ",modelName,": ", msg\n' \
+              '\t\t\t\tIF (LEN(msg) .GT. 1) THEN\n' \
+              '\t\t\t\t\tWRITE(IUNIT,*) "Error in ",OrigModelNameShortened,": ", msg\n' \
+              '\t\t\t\tELSE\n' \
+              '\t\t\t\t\tWRITE(IUNIT,*) "Unspecified error in ",OrigModelNameShortened\n' \
+              '\t\t\t\tENDIF\n' \
+              '\t\t\t\tFLUSH(IUNIT)\n' \
+              '\t\t\t\tSTOP  ! Stop the simulation\n' \
               '\t\t\tELSE IF (retval .eq. IEEE_Cigre_DLLInterface_Return_Message) THEN\n' \
               '\t\t\t\tmsg = Get_Fortran_String(pInstance%LastGeneralMessage)\n' \
-              '\t\t\t\tIF (LEN(msg) .GT. 1) WRITE(IUNIT,*) modelName,": ", msg\n' \
+              '\t\t\t\tIF (LEN(msg) .GT. 1) WRITE(IUNIT,*) OrigModelNameShortened,": ", msg\n' \
               '\t\t\tENDIF\n' \
               '\t\tend subroutine\n\n' \
               '\t\t! Load DLL into dllHandle\n' \
@@ -901,22 +908,24 @@ class Application(tk.Tk):
               '\t\t\timplicit none\n' \
               '\t\t\tcharacter*(*), INTENT(IN) :: DLL_Path\n' \
               '\t\t\tdllHandle = LoadLibrary(trim(DLL_Path) // C_NULL_CHAR)\n' \
+              '\t\t\tif (dllHandle .eq. 0) then\n' \
+              '\t\t\t\tWRITE(IUNIT,*) "==============================================================================="\n' \
+              '\t\t\t\tWRITE(IUNIT,*) "*** ",OrigModelNameShortened," Error loading ", trim(DLL_Path)\n' \
+              '\t\t\t\tWRITE(IUNIT,*) "==============================================================================="\n' \
+              '\t\t\t\tSTOP\n' \
+              '\t\t\tendif\n' \
               '\t\tend subroutine\n\n' \
               '\t\t! Get the address of the DLL function and store it in functionAd\n' \
-              '\t\tsubroutine Get_Pointer_To_DLL_Function(IUNIT, functionName, functionAd)\n' \
+              '\t\tsubroutine Get_Pointer_To_DLL_Function(functionName, functionAd)\n' \
               '\t\t\t!use IFWIN\n' \
               '\t\t\tuse, intrinsic :: iso_c_binding, only : c_null_char\n' \
               '\t\t\timplicit none\n' \
-              '\t\t\tinteger, INTENT(IN) :: IUNIT\n' \
               '\t\t\tcharacter*(*), INTENT(IN) :: functionName\n' \
               '\t\t\tinteger(handle), INTENT(INOUT) :: functionAd\n' \
-              '\t\t\tif (dllHandle .eq. 0) then\n' \
-              '\t\t\t! todo : throw exception\n' \
-              '\t\t\tendif\n' \
               '\t\t\tfunctionAd = GetProcAddress(dllHandle, trim(functionName)// C_NULL_CHAR)\n' \
               '\t\t\tif (functionAd .eq. 0) then\n' \
               '\t\t\t\tWRITE(IUNIT,*) "==============================================================================="\n' \
-              '\t\t\t\tWRITE(IUNIT,*) "*** ' + self.Model_Name_Shortened + ' Error finding DLL function ",trim(functionName)\n' \
+              '\t\t\t\tWRITE(IUNIT,*) "*** ",OrigModelNameShortened," Error finding DLL function ",trim(functionName)\n' \
               '\t\t\t\tWRITE(IUNIT,*) "==============================================================================="\n' \
               '\t\t\t\tstop\n' \
               '\t\t\tendif\n' \
@@ -969,7 +978,6 @@ class Application(tk.Tk):
               '\tTYPE(ModelParameters) :: PARAMETERS_new\n' \
               '\t! To check if the DLL has changed, the name and version will be checked against the name and version extracted from the DLL\n' \
               '\tTYPE(c_ptr)    :: DLLModelName_cp  ! The C pointer to the DLL ModelName\n' \
-              '\tCHARACTER*50   :: OrigModelName       = "' + self.Model_Name + '"    ! Model name, written by the DLL Import tool\n' \
               '\tINTEGER(KIND=c_int8_t), DIMENSION(4) :: DLLInterfaceVersion  ! The DLL interface version of the DLL\n' \
               '\tINTEGER(KIND=c_int8_t), DIMENSION(4) :: OrigDLLInterfaceVersion = ' + str(self.DLLInterfaceVersion) + '  ! DLL interface version, written by the DLL Import tool\n'
               #'\tINTEGER(KIND=c_int8_t), DIMENSION(4) :: OrigDLLInterfaceVersion = [' + ', '.join(map(str, self.DLLInterfaceVersion)) + ']  ! DLL interface version, written by the DLL Import tool\n'
@@ -979,7 +987,6 @@ class Application(tk.Tk):
             bf += '\tREAL*4, DIMENSION(' + str(self.Model_Info.NumFloatStates) + ') :: STORFLOAT  ! To store IEEE CIGRE FloatStates array\n'
 
         bf += '\n' \
-              '\tIUNIT          = 6         ! Do Write(6,*) messages\n\n' \
               '\t! Initialize Next_t_model.\n' \
               '\t! TIMEZERO is True when time t = 0.0\n' \
               '\t! If it\'s FIRSTSTEP but not TIMEZERO => Next_t_model = STORF(NSTORF)\n' \
@@ -999,43 +1006,43 @@ class Application(tk.Tk):
               '\t\t! Load dllHandle\n' \
               '\t\tCALL Get_DLL_Handle(DLL_Path)\n\n' \
               '\t\t! Set pointers to DLL functions\n' \
-              '\t\tCALL Get_Pointer_To_DLL_Function(IUNIT, "Model_GetInfo", pointer_Model_GetInfo)\n' \
-              '\t\tCALL Get_Pointer_To_DLL_Function(IUNIT, "Model_Outputs", pointer_Model_Outputs)\n' \
-              '\t\tCALL Get_Pointer_To_DLL_Function(IUNIT, "Model_Initialize", pointer_Model_Initialize)\n' \
-              '\t\tCALL Get_Pointer_To_DLL_Function(IUNIT, "Model_CheckParameters", pointer_Model_CheckParameters)\n' \
-              '\t\tCALL Get_Pointer_To_DLL_Function(IUNIT, "Model_PrintInfo", pointer_Model_PrintInfo)\n' \
-              '\t\tCALL Get_Pointer_To_DLL_Function(IUNIT, "Model_Terminate", pointer_Model_Terminate)\n' \
-              '\t\tCALL Get_Pointer_To_DLL_Function(IUNIT, "Model_FirstCall", pointer_Model_FirstCall)\n' \
-              '\t\tCALL Get_Pointer_To_DLL_Function(IUNIT, "Model_Iterate", pointer_Model_Iterate)\n\n' \
+              '\t\tCALL Get_Pointer_To_DLL_Function("Model_GetInfo", pointer_Model_GetInfo)\n' \
+              '\t\tCALL Get_Pointer_To_DLL_Function("Model_Outputs", pointer_Model_Outputs)\n' \
+              '\t\tCALL Get_Pointer_To_DLL_Function("Model_Initialize", pointer_Model_Initialize)\n' \
+              '\t\tCALL Get_Pointer_To_DLL_Function("Model_CheckParameters", pointer_Model_CheckParameters)\n' \
+              '\t\tCALL Get_Pointer_To_DLL_Function("Model_PrintInfo", pointer_Model_PrintInfo)\n' \
+              '\t\tCALL Get_Pointer_To_DLL_Function("Model_Terminate", pointer_Model_Terminate)\n' \
+              '\t\tCALL Get_Pointer_To_DLL_Function("Model_FirstCall", pointer_Model_FirstCall)\n' \
+              '\t\tCALL Get_Pointer_To_DLL_Function("Model_Iterate", pointer_Model_Iterate)\n\n' \
               '\t\t! Get the C pointer to ModelInfo\n' \
               '\t\tModel_Info_cp = Model_GetInfo()\n\n' \
               '\t\t! Transfer the C pointer to the F pointer\n' \
               '\t\tcall c_f_pointer(Model_Info_cp, Model_Info_fp)\n\n' \
               '\t\t! Call DLL routine to Print DLL Model Information\n' \
               '\t\tretval = Model_PrintInfo()\n' \
-              '\t\tcall Handle_Message(pInstance, OrigModelName, IUNIT, retval)\n\n' \
+              '\t\tcall Handle_Message(pInstance, retval)\n\n' \
               '\t\t! Extract the control code sampling step size (Seconds)\n' \
               '\t\tDELT_Model = Model_Info_fp.FixedStepBaseSampleTime\n\n' \
               '\t\t! Error if the time step required by the controls is smaller than the simulation time step\n' \
               '\t\tIF ( DELT_Model .LT. DELT) THEN\n' \
-              '\t\t\tWRITE(IUNIT,*) "*** Error - The ' + self.Model_Name + ' controls require a time-step of ", DELT_Model\n' \
+              '\t\t\tWRITE(IUNIT,*) "*** Error - The ",OrigModelNameShortened," controls require a time-step of ", DELT_Model\n' \
               '\t\t\tWRITE(IUNIT,*) "The current program time-step used is ", DELT\n' \
               '\t\t\tWRITE(IUNIT,*) "The controller sample time must be larger than the simulation time-step."\n' \
               '\t\t\tSTOP\n' \
               '\t\tENDIF\n\n' \
               '\t\tDLLModelName_cp = Model_Info_fp.ModelName\n' \
               '\t\tIF (Get_Fortran_String(DLLModelName_cp) .NE. OrigModelName ) THEN\n' \
-              '\t\t\tWRITE(IUNIT,*) "*** Error - The model name in the fortran interface code generated by the DLLImport tools is: ", OrigModelName\n' \
+              '\t\t\tWRITE(IUNIT,*) "*** Warning - The model name in the fortran interface code generated by the DLLImport tools is: ", OrigModelName\n' \
               '\t\t\tWRITE(IUNIT,*) "but the model name in the DLL is: ", Get_Fortran_String(DLLModelName_cp)\n' \
-              '\t\t\tWRITE(IUNIT,*) "They must match."\n' \
+              '\t\t\tWRITE(IUNIT,*) "They must match. Simulation continues anyway"\n' \
               '\t\tENDIF\n\n' \
               '\t\tDLLInterfaceVersion = Model_Info_fp.DLLInterfaceVersion  ! DLLInterfaceVersion got from the DLL\n' \
               '\t\t! Compare it to OrigDLLInterfaceVersion (DLL interface version, written by the DLL Import tool)\n' \
               '\t\tDO i = 1, 4\n' \
               '\t\t\tIF (DLLInterfaceVersion(i) /= OrigDLLInterfaceVersion(i)) THEN\n' \
-              '\t\t\t\tWRITE(IUNIT,*) "*** Error - The DLL interface version in the fortran interface code generated by the DLLImport tools is: ", OrigDLLInterfaceVersion(1), ".", OrigDLLInterfaceVersion(2), ".", OrigDLLInterfaceVersion(3), ".", OrigDLLInterfaceVersion(4)\n' \
+              '\t\t\t\tWRITE(IUNIT,*) "*** Warning - The DLL interface version in the fortran interface code generated by the DLLImport tools is: ", OrigDLLInterfaceVersion(1), ".", OrigDLLInterfaceVersion(2), ".", OrigDLLInterfaceVersion(3), ".", OrigDLLInterfaceVersion(4)\n' \
               '\t\t\t\tWRITE(IUNIT,*) "but the DLL interface version in the DLL is: ", DLLInterfaceVersion(1), ".", DLLInterfaceVersion(2), ".", DLLInterfaceVersion(3), ".", DLLInterfaceVersion(4)\n' \
-              '\t\t\t\tWRITE(IUNIT,*) "They must match."\n' \
+              '\t\t\t\tWRITE(IUNIT,*) "They must match. Simulation continues anyway"\n' \
               '\t\t\t\tEXIT\n' \
               '\t\t\tEND IF\n' \
               '\t\tEND DO\n\n' \
@@ -1054,14 +1061,14 @@ class Application(tk.Tk):
               '\tIF ( FIRSTSTEP ) THEN\n' \
               '\t\tN_INSTANCE = N_INSTANCE + 1\n' \
               '\t\tretval = Model_FirstCall(pInstance)\n' \
-              '\t\tcall Handle_Message(pInstance, OrigModelName, IUNIT, retval)\n' \
+              '\t\tcall Handle_Message(pInstance, retval)\n' \
               '\tENDIF\n\n' \
               '\t! Check if the model sampling time has been reached\n' \
               '\tIF ( TIME .GE. Next_t_model - EQUALITY_PRECISION ) THEN\n\n' \
               '\t\t! Model_CheckParameters must be just after Model_FirstCall\n' \
               '\t\t! Do it at every call, parameters in PSCAD can changed during the simulation\n' \
               '\t\tretval = Model_CheckParameters(pInstance)\n' \
-              '\t\tcall Handle_Message(pInstance, OrigModelName, IUNIT, retval)\n\n' \
+              '\t\tcall Handle_Message(pInstance, retval)\n\n' \
               '\t\t! Determine when the model should be initializing\n' \
               '\t\tIsInitializing = .FALSE.\n' \
               '\t\t! IF ( TIME .LE. TRelease ) should also work\n' \
@@ -1073,7 +1080,7 @@ class Application(tk.Tk):
         bf += outputs_init_pscad_to_new_struct + '\n'
 
         bf += '\t\t\tretval = Model_Initialize(pInstance)\n' \
-              '\t\t\tcall Handle_Message(pInstance, OrigModelName, IUNIT, retval)\n' \
+              '\t\t\tcall Handle_Message(pInstance, retval)\n' \
               '\t\tENDIF\n\n' \
               '\t\t! assign inputs from the simulation tool side to model inputs\n'
 
@@ -1081,7 +1088,7 @@ class Application(tk.Tk):
 
         bf += '\t\t! Call ModelOutputs function every DELT_Model sampling time\n' \
               '\t\tretval = Model_Outputs(pInstance)\n' \
-              '\t\tcall Handle_Message(pInstance, OrigModelName, IUNIT, retval)\n\n' \
+              '\t\tcall Handle_Message(pInstance, retval)\n\n' \
               '\t\tNext_t_model = Next_t_model + DELT_Model  ! Next_t_model indicates when the model will be called\n' \
               '\tENDIF\n\n' \
               '\t! --------------------------------\n' \
@@ -1103,7 +1110,7 @@ class Application(tk.Tk):
               '\tIF (LASTSTEP) THEN\n' \
               '\t\t! Call DLL routine Model_Terminate\n' \
               '\t\tretval =  Model_Terminate(pInstance)\n' \
-              '\t\tcall Handle_Message(pInstance, OrigModelName, IUNIT, retval)\n\n' \
+              '\t\tcall Handle_Message(pInstance, retval)\n\n' \
               '\t\t! FreeLibrary only at LASTSTEP of the last instance\n' \
               '\t\tN_CALL_LAST_STEP= N_CALL_LAST_STEP + 1\n' \
               '\t\tIF (N_CALL_LAST_STEP .EQ. N_INSTANCE) THEN\n' \
