@@ -181,6 +181,7 @@ class Application(tk.Tk):
 
             params_pscad_to_new_struct = self.generate_conversion(self.param_names, None, self.param_fortran_types,
                                                                   self.param_pscad_types, '_pscad', True, 'PARAMETERS_new')
+
             outputs_storf_to_new_struct = self.generate_conversion(self.out_names, self.out_width,
                                                                    self.out_fortran_types,
                                                                    self.out_pscad_types, None, True, 'OUTPUTS_new')
@@ -199,7 +200,8 @@ class Application(tk.Tk):
 
             inputs_pscad_to_new_struct = inputs_pscad_to_new_struct.replace('\t', '\t\t')  # double tab for this part
 
-            storfloat_to_storf = self.generate_storfloat_to_storf()
+            #storfloat_to_storf = self.generate_storfloat_to_storf()
+            state_arrays_to_storf = self.generate_state_arrays_to_storf()
 
             outputs_new_to_storf = self.generate_conversion(self.out_names, self.out_width,
                                                             self.out_fortran_types,
@@ -213,7 +215,7 @@ class Application(tk.Tk):
                                               finterface_function_prototype, variables_from_pscad,
                                               pointers_to_state_arrays, params_pscad_to_new_struct,
                                               outputs_storf_to_new_struct, outputs_init_pscad_to_new_struct,
-                                              inputs_pscad_to_new_struct, storfloat_to_storf, outputs_new_to_storf,
+                                              inputs_pscad_to_new_struct, state_arrays_to_storf, outputs_new_to_storf,
                                               outputs_new_to_pscad)
 
             with open(self.fortran_interface_file_path, 'w') as f:
@@ -439,22 +441,54 @@ class Application(tk.Tk):
         buffer = ''
         buffer += '\t! Setup Pointers to state variable storage\n'
         if self.Model_Info.NumIntStates > 0:
-            buffer += '\tpInstance%IntStates    = c_loc(STORI(NSTORI))\n'
+            buffer += '\tpInstance%IntStates    = c_loc(STATEI(1))\n'
         if self.Model_Info.NumFloatStates > 0:
-            buffer += '\tpInstance%FloatStates  = c_loc(STORFLOAT(1))\n'
+            buffer += '\tpInstance%FloatStates  = c_loc(STATEF(1))\n'
         if self.Model_Info.NumDoubleStates > 0:
-            buffer += '\tpInstance%DoubleStates  = c_loc(STORF(NSTORF + 1 + ' + str(self.Model_Info.NumFloatStates) + ')) !DoubleStates just after Next_t_model and FloatStates\n'
+            buffer += '\tpInstance%DoubleStates = c_loc(STATED(1))\n'
 
-        for i in range(self.Model_Info.NumFloatStates):
-            buffer += '\tSTORFLOAT(' + str(i+1) + ') = STORF(NSTORF + 1 + ' + str(i) + ') ! DOUBLE PRECISION (REAL*8) to REAL*4: possible accuracy lost\n'
+        buffer += '\n'
+        buffer += '\t! Copy values from STORx to STATEx\n'
+
+        if self.Model_Info.NumIntStates > 0:
+            buffer += '\tDO i = 1, ' + str(self.Model_Info.NumIntStates) + '\n'
+            buffer += '\t\tSTATEI(i) = STORI(NSTORI + i - 1)\n'
+            buffer += '\tEND DO\n'
+        if self.Model_Info.NumFloatStates > 0:
+            buffer += '\tDO i = 1, ' + str(self.Model_Info.NumFloatStates) + '\n'
+            buffer += '\t\tSTATEF(i) = STORF(idx_start_statef + i - 1)\n'
+            buffer += '\tEND DO\n'
+        if self.Model_Info.NumDoubleStates > 0:
+            buffer += '\tDO i = 1, ' + str(self.Model_Info.NumDoubleStates) + '\n'
+            buffer += '\t\tSTATED(i) = STORF(idx_start_stated + i - 1)\n'
+            buffer += '\tEND DO\n'
 
         buffer += '\n'
         return buffer
 
-    def generate_storfloat_to_storf(self):
+    """def generate_storfloat_to_storf(self):
         buffer = ''
         for i in range(self.Model_Info.NumFloatStates):
             buffer += '\tSTORF(NSTORF + 1 + ' + str(i) + ') = STORFLOAT(' + str(i + 1) + ')\n'
+
+        return buffer"""
+
+    def generate_state_arrays_to_storf(self):
+        buffer = ''
+        buffer += '\t! Copy values from STATEx to STORx\n'
+
+        if self.Model_Info.NumIntStates > 0:
+            buffer += '\tDO i = 1, ' + str(self.Model_Info.NumIntStates) + '\n'
+            buffer += '\t\tSTORI(NSTORI + i - 1) = STATEI(i)\n'
+            buffer += '\tEND DO\n'
+        if self.Model_Info.NumFloatStates > 0:
+            buffer += '\tDO i = 1, ' + str(self.Model_Info.NumFloatStates) + '\n'
+            buffer += '\t\tSTORF(idx_start_statef + i - 1) = STATEF(i)\n'
+            buffer += '\tEND DO\n'
+        if self.Model_Info.NumDoubleStates > 0:
+            buffer += '\tDO i = 1, ' + str(self.Model_Info.NumDoubleStates) + '\n'
+            buffer += '\t\tSTORF(idx_start_stated + i - 1) = STATED(i)\n'
+            buffer += '\tEND DO\n'
 
         return buffer
 
@@ -465,8 +499,7 @@ class Application(tk.Tk):
     # * True to fill INPUTS_new, OUTPUTS_new or PARAMETERS_new (INPUTS_new etc. on the left side)
     # * False to get values from them (INPUTS_new etc. on the right side)
     # new_struct is "INPUTS_new", "OUTPUTS_new" or "PARAMETERS_new"
-    def generate_conversion(self, names, widths, fortran_types, pscad_types, suffix, fill_new_struct,
-                            new_struct):
+    def generate_conversion(self, names, widths, fortran_types, pscad_types, suffix, fill_new_struct, new_struct):
         buffer = ''
         # width_sum = sum(widths)
         i_storf = 0
@@ -493,8 +526,7 @@ class Application(tk.Tk):
                     else:
                         part_2 = 'STORF(NSTORF + 1 + ' + str(i_storf) + ')'"""
 
-                    part_2 = 'STORF(NSTORF + 1 + ' + str(self.Model_Info.NumFloatStates) + ' + ' + \
-                             str(self.Model_Info.NumDoubleStates) + ' + ' + str(i_storf) + ')'
+                    part_2 = 'STORF(idx_start_outputs + ' + str(i_storf) + ')'
                     i_storf += 1
 
                     if fill_new_struct:  # STORF on the right side
@@ -778,7 +810,7 @@ class Application(tk.Tk):
     def create_fortran_code(self, type_modelinputs, type_modeloutputs, type_modelparameters,
                             finterface_function_prototype, variables_from_pscad,
                             pointers_to_state_arrays, params_pscad_to_new_struct, outputs_storf_to_new_struct,
-                            outputs_init_pscad_to_new_struct, inputs_pscad_to_new_struct, storfloat_to_storf,
+                            outputs_init_pscad_to_new_struct, inputs_pscad_to_new_struct, state_arrays_to_storf,
                             outputs_new_to_storf, outputs_new_to_pscad):
         bf = ''
         bf += ('\t! Common module for each instance of ' + self.Model_Name_Shortened + ' model\n' \
@@ -1002,9 +1034,9 @@ class Application(tk.Tk):
               '\tLOGICAL        :: IsInitializing    ! bool when the model is initializing\n' \
               '\tTYPE(c_ptr)                                           :: Model_Info_cp ! The C pointer of Model_GetInfo\n' \
               '\tTYPE(IEEE_Cigre_DLLInterface_Model_Info), POINTER     :: Model_Info_fp ! The F pointer of Model_GetInfo\n' \
-              '\tTYPE(ModelInputs)     :: INPUTS_new\n' \
-              '\tTYPE(ModelOutputs)    :: OUTPUTS_new\n' \
-              '\tTYPE(ModelParameters) :: PARAMETERS_new\n' \
+              '\tTYPE(ModelInputs), TARGET     :: INPUTS_new\n' \
+              '\tTYPE(ModelOutputs), TARGET    :: OUTPUTS_new\n' \
+              '\tTYPE(ModelParameters), TARGET :: PARAMETERS_new\n' \
               '\t! To check if the DLL has changed, the name and version will be checked against the name and version extracted from the DLL\n' \
               '\tTYPE(c_ptr)    :: DLLModelName_cp  ! The C pointer to the DLL ModelName\n' \
               '\tINTEGER(KIND=c_int8_t), DIMENSION(4) :: DLLInterfaceVersion  ! The DLL interface version of the DLL\n' \
@@ -1013,10 +1045,20 @@ class Application(tk.Tk):
               #'\tINTEGER(KIND=c_int8_t), DIMENSION(4) :: OrigDLLInterfaceVersion = [' + ', '.join(map(str, self.DLLInterfaceVersion)) + ']  ! DLL interface version, written by the DLL Import tool\n'
               #'\tCHARACTER*50   :: OrigModelVersion    = "' + self.DLLInterfaceVersionStr + '"  ! Model version, written by the DLL Import tool\n'
 
+        if self.Model_Info.NumIntStates > 0:
+            bf += '\tINTEGER, DIMENSION(' + str(self.Model_Info.NumIntStates) + ') :: STATEI  ! To store IEEE CIGRE IntStates array\n'
         if self.Model_Info.NumFloatStates > 0:
-            bf += '\tREAL*4, DIMENSION(' + str(self.Model_Info.NumFloatStates) + ') :: STORFLOAT  ! To store IEEE CIGRE FloatStates array\n'
+            bf += '\tREAL*4, DIMENSION(' + str(self.Model_Info.NumFloatStates) + ') :: STATEF  ! To store IEEE CIGRE FloatStates array\n'
+        if self.Model_Info.NumDoubleStates > 0:
+            bf += '\tDOUBLE PRECISION, DIMENSION(' + str(self.Model_Info.NumDoubleStates) + ') :: STATED  ! To store IEEE CIGRE DoubleStates array\n'
 
-        bf += '\n' \
+        bf += '\tINTEGER :: idx_start_statef  ! STORF start index to store float state variables\n' \
+              '\tINTEGER :: idx_start_stated  ! STORF start index to store double state variables\n' \
+              '\tINTEGER :: idx_start_outputs  ! STORF start index to store outputs\n\n' \
+              '\tInit STORF start indexes\n' \
+              '\tidx_start_statef = NSTORF + 1\n' \
+              '\tidx_start_stated = idx_start_statef + ' + str(self.Model_Info.NumFloatStates) + '\n' \
+              '\tidx_start_outputs = idx_start_stated + ' + str(self.Model_Info.NumDoubleStates) + '\n\n' \
               '\t! Initialize Next_t_model.\n' \
               '\t! TIMEZERO is True when time t = 0.0\n' \
               '\t! If it\'s FIRSTSTEP but not TIMEZERO => Next_t_model = STORF(NSTORF)\n' \
@@ -1129,7 +1171,7 @@ class Application(tk.Tk):
               '\t! --------------------------------\n\n' \
               '\tSTORF(NSTORF) = Next_t_model\n\n'
 
-        bf += storfloat_to_storf + '\n'
+        bf += state_arrays_to_storf + '\n'
 
         bf += '\t! Outputs back into storage\n'
 
@@ -1157,12 +1199,13 @@ class Application(tk.Tk):
         if NumIntStates > 0:
             bf += '\tNSTORI = NSTORI + ' + str(NumIntStates) + ' ! # of integer states used in the dll\n'
 
-        NumFloatStates = self.Model_Info.NumFloatStates
-        NumDoubleStates = self.Model_Info.NumDoubleStates
+        #NumFloatStates = self.Model_Info.NumFloatStates
+        #NumDoubleStates = self.Model_Info.NumDoubleStates
         nb_outputs_total = sum(self.out_width)
-        bf += '\tNSTORF = NSTORF + 1 + ' + str(NumFloatStates) + ' + ' + str(NumDoubleStates) + ' + ' + str(nb_outputs_total) + ' ! STORF contains Next_t_model, float states, double states, outputs \n\n'
-
+        #bf += '\tNSTORF = NSTORF + 1 + ' + str(NumFloatStates) + ' + ' + str(NumDoubleStates) + ' + ' + str(nb_outputs_total) + ' ! STORF contains Next_t_model, float states, double states, outputs \n\n'
+        bf += '\tNSTORF = idx_start_outputs + ' + str(nb_outputs_total) + '  ! STORF contains Next_t_model, float states, double states, outputs\n\n'
         bf += '\tEND\n\n'
+
         return bf
 
     # See : https://docs.oracle.com/cd/E19957-01/805-4940/z40009104412/index.html
