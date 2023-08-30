@@ -1096,7 +1096,7 @@ class Application(tk.Tk):
               '\t\tN_INSTANCE = N_INSTANCE + 1\n' \
               '\t\tretval = Model_FirstCall(pInstance)\n' \
               '\t\tcall Handle_Message(pInstance, retval)\n\n' \
-              '\t\t! Model_CheckParameters must be just after Model_FirstCall\n' \
+              '\t\t! Model_CheckParameters must be called just after Model_FirstCall\n' \
               '\t\tretval = Model_CheckParameters(pInstance)\n' \
               '\t\tcall Handle_Message(pInstance, retval)\n' \
               '\tENDIF\n\n' \
