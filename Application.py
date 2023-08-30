@@ -61,7 +61,7 @@ class Application(tk.Tk):
         self.param_pscad_types = []  # For an IEEE CIGRE DLL, it can be INTEGER, REAL or CHARACTER(*)
         self.param_descriptions = []
         self.param_units = []
-        self.param_fixedValue = []  # int
+        self.param_fixedValue = []  # int, keep it in case of calling Model_CheckParameters each time parameters have really changed
         self.param_default_values = []
         self.param_min_values = []
         self.param_max_values = []
@@ -177,7 +177,7 @@ class Application(tk.Tk):
                                                             self.out_fortran_types,
                                                             self.out_pscad_types, False, False, 'OUTPUTS_new')"""
 
-            params_change_check = self.generate_parameters_change_check()
+            # params_change_check = self.generate_parameters_change_check()
 
             params_pscad_to_new_struct = self.generate_conversion(self.param_names, None, self.param_fortran_types,
                                                                   self.param_pscad_types, '_pscad', True, 'PARAMETERS_new')
@@ -211,7 +211,7 @@ class Application(tk.Tk):
 
             buffer = self.create_fortran_code(type_modelinputs, type_modeloutputs, type_modelparameters,
                                               finterface_function_prototype, variables_from_pscad,
-                                              pointers_to_state_arrays, params_change_check, params_pscad_to_new_struct,
+                                              pointers_to_state_arrays, params_pscad_to_new_struct,
                                               outputs_storf_to_new_struct, outputs_init_pscad_to_new_struct,
                                               inputs_pscad_to_new_struct, storfloat_to_storf, outputs_new_to_storf,
                                               outputs_new_to_pscad)
@@ -270,7 +270,7 @@ class Application(tk.Tk):
             datatype = parameter.DataType  # ex: IEEE_Cigre_DLLInterface_DataType_int8_T
             description = parameter.Description.decode("utf-8")
             unit = parameter.Unit.decode("utf-8")
-            fixedValue = parameter.FixedValue  # is int
+            fixedValue = parameter.FixedValue  # is int, keep it in case of calling Model_CheckParameters each time parameters have really changed
             default_value = self.get_parameter_default_min_or_max_value(parameter.DefaultValue, datatype)
             # IEEE CIGRE DLL allows min max value for strings
             min_value = self.get_parameter_default_min_or_max_value(parameter.MinValue, datatype)
@@ -410,7 +410,8 @@ class Application(tk.Tk):
 
         return buffer"""
 
-    def generate_parameters_change_check(self):
+    # Keep it in case of calling Model_CheckParameters each time parameters have really changed (but do not use PARAMETERS_new)
+    """def generate_parameters_change_check(self):
         buffer = ''
 
         #param_names_that_change = []
@@ -432,7 +433,7 @@ class Application(tk.Tk):
             buffer += '\t\tParametersChanged = .TRUE.\n'
             buffer += '\tENDIF\n\n'
 
-        return buffer
+        return buffer"""
 
     def generate_pointers_to_state_arrays(self):
         buffer = ''
@@ -776,7 +777,7 @@ class Application(tk.Tk):
     # fichier_decoded = base64.b64decode(encoded_file)
     def create_fortran_code(self, type_modelinputs, type_modeloutputs, type_modelparameters,
                             finterface_function_prototype, variables_from_pscad,
-                            pointers_to_state_arrays, params_change_check, params_pscad_to_new_struct, outputs_storf_to_new_struct,
+                            pointers_to_state_arrays, params_pscad_to_new_struct, outputs_storf_to_new_struct,
                             outputs_init_pscad_to_new_struct, inputs_pscad_to_new_struct, storfloat_to_storf,
                             outputs_new_to_storf, outputs_new_to_pscad):
         bf = ''
@@ -1007,8 +1008,8 @@ class Application(tk.Tk):
               '\t! To check if the DLL has changed, the name and version will be checked against the name and version extracted from the DLL\n' \
               '\tTYPE(c_ptr)    :: DLLModelName_cp  ! The C pointer to the DLL ModelName\n' \
               '\tINTEGER(KIND=c_int8_t), DIMENSION(4) :: DLLInterfaceVersion  ! The DLL interface version of the DLL\n' \
-              '\tINTEGER(KIND=c_int8_t), DIMENSION(4) :: OrigDLLInterfaceVersion = ' + str(self.DLLInterfaceVersion) + '  ! DLL interface version, written by the DLL Import tool\n' \
-              '\tLOGICAL :: ParametersChanged = .FALSE.  ! Indicates whether parameters have changed since the previous call\n'
+              '\tINTEGER(KIND=c_int8_t), DIMENSION(4) :: OrigDLLInterfaceVersion = ' + str(self.DLLInterfaceVersion) + '  ! DLL interface version, written by the DLL Import tool\n'
+              #'\tLOGICAL :: ParametersChanged  ! Indicates whether parameters have changed since the previous call\n'
               #'\tINTEGER(KIND=c_int8_t), DIMENSION(4) :: OrigDLLInterfaceVersion = [' + ', '.join(map(str, self.DLLInterfaceVersion)) + ']  ! DLL interface version, written by the DLL Import tool\n'
               #'\tCHARACTER*50   :: OrigModelVersion    = "' + self.DLLInterfaceVersionStr + '"  ! Model version, written by the DLL Import tool\n'
 
@@ -1078,8 +1079,7 @@ class Application(tk.Tk):
               '\t\tFIRST_CALL_THIS_FILE = .FALSE.\n\n' \
               '\tENDIF\n\n' \
 
-        bf += params_change_check
-
+        # bf += params_change_check
         bf += '\t! Assign parameters from the simulation tool side to model parameters\n' \
               '\t! Done before Model_FirstCall because this function may use the parameters\n'
 
@@ -1095,16 +1095,13 @@ class Application(tk.Tk):
               '\tIF ( FIRSTSTEP ) THEN\n' \
               '\t\tN_INSTANCE = N_INSTANCE + 1\n' \
               '\t\tretval = Model_FirstCall(pInstance)\n' \
+              '\t\tcall Handle_Message(pInstance, retval)\n\n' \
+              '\t\t! Model_CheckParameters must be just after Model_FirstCall\n' \
+              '\t\tretval = Model_CheckParameters(pInstance)\n' \
               '\t\tcall Handle_Message(pInstance, retval)\n' \
               '\tENDIF\n\n' \
               '\t! Check if the model sampling time has been reached\n' \
               '\tIF ( TIME .GE. Next_t_model - EQUALITY_PRECISION ) THEN\n\n' \
-              '\t\t! Model_CheckParameters must be just after Model_FirstCall\n' \
-              '\t\t! Do it only if parameters have changed\n' \
-              '\t\tIF (ParametersChanged) THEN\n' \
-              '\t\t\tretval = Model_CheckParameters(pInstance)\n' \
-              '\t\t\tcall Handle_Message(pInstance, retval)\n' \
-              '\t\tENDIF\n\n' \
               '\t\t! Determine when the model should be initializing\n' \
               '\t\tIsInitializing = .FALSE.\n' \
               '\t\t! IF ( TIME .LE. TRelease ) should also work\n' \
