@@ -15,5 +15,5 @@ if __name__ == '__main__':
     app = Application(num_version)
     app.start()
     #app.title("PSCAD Import Tool (v" + num_version + ") of an IEEE/Cigre DLL format")
-    app.title("PSCAD Import Tool (IEEE/CIGRE DLL format) RTE/TUD v" + num_version)
+    app.title("PSCAD Import Tool (IEEE/Cigre DLL format) RTE/TUD v" + num_version)
     app.mainloop()  # display window
