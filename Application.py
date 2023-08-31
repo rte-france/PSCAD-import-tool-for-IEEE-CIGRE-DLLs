@@ -1046,11 +1046,11 @@ class Application(tk.Tk):
               #'\tCHARACTER*50   :: OrigModelVersion    = "' + self.DLLInterfaceVersionStr + '"  ! Model version, written by the DLL Import tool\n'
 
         if self.Model_Info.NumIntStates > 0:
-            bf += '\tINTEGER, DIMENSION(' + str(self.Model_Info.NumIntStates) + ') :: STATEI  ! To store IEEE CIGRE IntStates array\n'
+            bf += '\tINTEGER, DIMENSION(' + str(self.Model_Info.NumIntStates) + '), TARGET :: STATEI  ! To store IEEE CIGRE IntStates array\n'
         if self.Model_Info.NumFloatStates > 0:
-            bf += '\tREAL*4, DIMENSION(' + str(self.Model_Info.NumFloatStates) + ') :: STATEF  ! To store IEEE CIGRE FloatStates array\n'
+            bf += '\tREAL*4, DIMENSION(' + str(self.Model_Info.NumFloatStates) + '), TARGET :: STATEF  ! To store IEEE CIGRE FloatStates array\n'
         if self.Model_Info.NumDoubleStates > 0:
-            bf += '\tDOUBLE PRECISION, DIMENSION(' + str(self.Model_Info.NumDoubleStates) + ') :: STATED  ! To store IEEE CIGRE DoubleStates array\n'
+            bf += '\tDOUBLE PRECISION, DIMENSION(' + str(self.Model_Info.NumDoubleStates) + '), TARGET :: STATED  ! To store IEEE CIGRE DoubleStates array\n'
 
         bf += '\tINTEGER :: idx_start_statef  ! STORF start index to store float state variables\n' \
               '\tINTEGER :: idx_start_stated  ! STORF start index to store double state variables\n' \
