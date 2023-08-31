@@ -1055,7 +1055,7 @@ class Application(tk.Tk):
         bf += '\tINTEGER :: idx_start_statef  ! STORF start index to store float state variables\n' \
               '\tINTEGER :: idx_start_stated  ! STORF start index to store double state variables\n' \
               '\tINTEGER :: idx_start_outputs  ! STORF start index to store outputs\n\n' \
-              '\tInit STORF start indexes\n' \
+              '\t!Init STORF start indexes\n' \
               '\tidx_start_statef = NSTORF + 1\n' \
               '\tidx_start_stated = idx_start_statef + ' + str(self.Model_Info.NumFloatStates) + '\n' \
               '\tidx_start_outputs = idx_start_stated + ' + str(self.Model_Info.NumDoubleStates) + '\n\n' \
