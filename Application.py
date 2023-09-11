@@ -66,6 +66,10 @@ class Application(tk.Tk):
         self.param_min_values = []
         self.param_max_values = []
 
+        self.nb_inputs_total = 0
+        self.nb_outputs_total = 0
+        self.nb_params_total = 0
+
     # Run the program and display GUI
     def start(self):
         self.create_widgets()
@@ -122,6 +126,10 @@ class Application(tk.Tk):
 
         self.list_label_errors = []
 
+        self.nb_inputs_total = 0
+        self.nb_outputs_total = 0
+        self.nb_params_total = 0
+
     def generate_pscad_model(self):
         self.clean_attributes()
 
@@ -150,14 +158,14 @@ class Application(tk.Tk):
 
             type_modelparameters = self.generate_type('ModelParameters',
                                                       self.Model_Info.NumParameters, self.Model_Info.ParametersInfo)"""
-            storfloat_declaration = self.generate_storfloat_declaration()
+            #storfloat_declaration = self.generate_storfloat_declaration()
             type_modelinputs = self.generate_type('ModelInputs', self.in_names, self.in_fortran_types, self.in_width)
             type_modeloutputs = self.generate_type('ModelOutputs', self.out_names, self.out_fortran_types, self.out_width)
             type_modelparameters = self.generate_type('ModelParameters', self.param_names, self.param_fortran_types)
             finterface_function_prototype = self.generate_finterface_function_prototype()
             variables_from_pscad = self.generate_variables_from_pscad()
             # storfloat_code = self.generate_storfloat_code()
-            pointers_to_state_arrays = self.generate_pointers_to_state_arrays()
+            #pointers_to_state_arrays = self.generate_pointers_to_state_arrays()
             """params_pscad_to_new_struct = self.generate_conversion(self.param_names, None, self.param_fortran_types,
                                                                   self.param_pscad_types, False, True, 'PARAMETERS_new')
             outputs_storf_to_new_struct = self.generate_conversion(self.out_names, self.out_width, self.out_fortran_types,
@@ -198,10 +206,10 @@ class Application(tk.Tk):
                                                                   self.in_fortran_types,
                                                                   self.in_pscad_types, '_pscad', True, 'INPUTS_new')
 
-            inputs_pscad_to_new_struct = inputs_pscad_to_new_struct.replace('\t', '\t\t')  # double tab for this part
+            inputs_pscad_to_new_struct = inputs_pscad_to_new_struct.replace('\t', '\t\t\t')  # double tab for this part
 
             #storfloat_to_storf = self.generate_storfloat_to_storf()
-            state_arrays_to_storf = self.generate_state_arrays_to_storf()
+            #state_arrays_to_storf = self.generate_state_arrays_to_storf()
 
             outputs_new_to_storf = self.generate_conversion(self.out_names, self.out_width,
                                                             self.out_fortran_types,
@@ -213,7 +221,7 @@ class Application(tk.Tk):
 
             buffer = self.create_fortran_code(type_modelinputs, type_modeloutputs, type_modelparameters,
                                               finterface_function_prototype, variables_from_pscad,
-                                              pointers_to_state_arrays, params_pscad_to_new_struct,
+                                              params_pscad_to_new_struct,
                                               outputs_storf_to_new_struct, outputs_init_pscad_to_new_struct,
                                               inputs_pscad_to_new_struct, state_arrays_to_storf, outputs_new_to_storf,
                                               outputs_new_to_pscad)
@@ -296,6 +304,10 @@ class Application(tk.Tk):
             self.param_min_values.append(min_value)
             self.param_max_values.append(max_value)
 
+        self.nb_inputs_total = sum(self.in_width)
+        self.nb_outputs_total = sum(self.out_width)
+        self.nb_params_total = self.Model_Info.NumParameters
+
     # parameter is of type IEEE_Cigre_DLLInterface_Parameter
     def get_parameter_default_min_or_max_value(self, parameter_union, datatype):
         if datatype == IEEE_Cigre_DLLInterface_DataType_Enum.IEEE_Cigre_DLLInterface_DataType_char_T:
@@ -322,7 +334,7 @@ class Application(tk.Tk):
             raise Exception('get_parameter_default_min_or_max_value : error in dataType_enum: ' + str(datatype))
 
 
-    def generate_storfloat_declaration(self):
+    """def generate_storfloat_declaration(self):
         buffer = ''
         NumFloatStates = self.Model_Info.NumFloatStates
         if NumFloatStates > 0:
@@ -333,7 +345,7 @@ class Application(tk.Tk):
               '\tINTEGER :: N_MAX_INSTANCE = 100  ! nb max of instances of this specific IEEE CIGRE Model\n' \
               '\tDOUBLE PRECISION :: TIME_PREV = -1  ! Used only to reset NSTORFLOAT to 1\n\n' \
 
-        return buffer
+        return buffer"""
 
     def generate_type(self, type_name, names, fortran_types, widths=None):
         buffer = ''
@@ -374,24 +386,28 @@ class Application(tk.Tk):
 
     def generate_variables_from_pscad(self):
         buffer = ''
-        buffer += self.generate_variables_declaration('IN', self.in_names, self.in_pscad_types, self.in_width)
+        buffer += self.generate_variables_declaration('IN', self.in_names, '_pscad', self.in_pscad_types, self.in_width)
         buffer += '\n'
-        buffer += self.generate_variables_declaration('IN', self.param_names, self.param_pscad_types, None)
+        buffer += self.generate_variables_declaration('IN', self.param_names, '_pscad', self.param_pscad_types, None)
         buffer += '\n'
         out_init_names = [x + '_init' for x in self.out_names]
-        buffer += self.generate_variables_declaration('IN', out_init_names, self.out_pscad_types, self.out_width)
+        buffer += self.generate_variables_declaration('IN', out_init_names, '_pscad', self.out_pscad_types, self.out_width)
         buffer += '\n'
-        buffer += self.generate_variables_declaration('OUT', self.out_names, self.out_pscad_types, self.out_width)
+        buffer += self.generate_variables_declaration('OUT', self.out_names, '_pscad', self.out_pscad_types, self.out_width)
         return buffer
 
-    def generate_variables_declaration(self, intent_value, var_names, var_pscad_types, var_width=None):
+    def generate_variables_declaration(self, intent_value, var_names, var_suffix, var_types, var_width=None):
         buffer = ''
+        intent_str = ''
+        if intent_value is not None and intent_value != '':
+            intent_str = ', INTENT(' + intent_value + ')'
+
         for i in range(0, len(var_names)):
             if var_width is not None and var_width[i] > 1:
-                buffer += '\t' + var_pscad_types[i] + ', INTENT(' + intent_value + ') :: ' + var_names[i] +\
-                          '_pscad(' + str(var_width[i]) + ')\n'
+                buffer += ('\t' + var_types[i] + intent_str + ' :: ' + var_names[i] + var_suffix +
+                           '(' + str(var_width[i]) + ')\n')
             else:
-                buffer += '\t' + var_pscad_types[i] + ', INTENT(' + intent_value + ') :: ' + var_names[i] + '_pscad\n'
+                buffer += '\t' + var_types[i] + intent_str + ' :: ' + var_names[i] + var_suffix + '\n'
         return buffer
 
     # No more used
@@ -437,7 +453,7 @@ class Application(tk.Tk):
 
         return buffer"""
 
-    def generate_pointers_to_state_arrays(self):
+    """def generate_pointers_to_state_arrays(self):
         buffer = ''
         buffer += '\t! Setup Pointers to state variable storage\n'
         if self.Model_Info.NumIntStates > 0:
@@ -464,7 +480,7 @@ class Application(tk.Tk):
             buffer += '\tEND DO\n'
 
         buffer += '\n'
-        return buffer
+        return buffer"""
 
     """def generate_storfloat_to_storf(self):
         buffer = ''
@@ -473,7 +489,7 @@ class Application(tk.Tk):
 
         return buffer"""
 
-    def generate_state_arrays_to_storf(self):
+    """def generate_state_arrays_to_storf(self):
         buffer = ''
         buffer += '\t! Copy values from STATEx to STORx\n'
 
@@ -490,7 +506,7 @@ class Application(tk.Tk):
             buffer += '\t\tSTORF(idx_start_stated + i - 1) = STATED(i)\n'
             buffer += '\tEND DO\n'
 
-        return buffer
+        return buffer"""
 
     # names is self.in_names or self.param_names or self.out_names
     # same for widths, fortran_types and pscad_types
@@ -557,6 +573,70 @@ class Application(tk.Tk):
                 buffer += '\n'
 
         return buffer
+
+    def generate_storf_to_prev_inputs(self):
+        buffer = ''
+        # width_sum = sum(widths)
+        i_storf = 0
+        for i in range(0, self.Model_Info.NumInputPorts):
+            width = self.in_width[i]
+            name = self.in_names[i]
+            pscad_type = self.in_pscad_types[i]
+            #fortran_type = self.in_fortran_types[i]
+
+            part_1_base = name + '_pscad_prev'
+
+            for j in range(1, width + 1):  # work also if width == 1
+                if width == 1:
+                    part_1 = part_1_base
+                else:
+                    part_1 = part_1_base + '(' + str(j) + ')'
+
+                part_2 = 'STORF(idx_start_inputs + ' + str(i_storf) + ')'
+                i_storf += 1
+
+                type_from = 'DOUBLE PRECISION'  # REAL*8
+                type_to = pscad_type
+
+                conversion_part_1, conversion_part_2 = self.get_conversion(type_from, type_to)
+
+                buffer += '\t\t' + part_1 + ' = ' + conversion_part_1 + part_2 + conversion_part_2
+                buffer += '\n'
+
+        return buffer
+
+    def generate_interpolated_inputs(self):
+        buffer = ''
+        #i_storf = 0
+        for i in range(0, self.Model_Info.NumInputPorts):
+            width = self.in_width[i]
+            name = self.in_names[i]
+            #pscad_type = self.in_pscad_types[i]
+            fortran_type = self.in_fortran_types[i]
+
+            part_1_base = 'INPUTS_new%' + name
+
+            for j in range(1, width + 1):  # work also if width == 1
+                if width == 1:
+                    part_1 = part_1_base
+                    part_2 = name + '_pscad_prev + (' + name + '_pscad - ' + name + '_pscad_prev) * delta_t2 / delta_t1'
+                else:
+                    part_1 = part_1_base + '(' + str(j) + ')'
+                    part_2 = (name + '_pscad_prev(' + str(j) + ') + (' + name + '_pscad(' + str(j) + ') - ' +
+                              name + '_pscad_prev(' + str(j) + ')) * delta_t2 / delta_t1')
+
+                #i_storf += 1
+
+                type_from = 'DOUBLE PRECISION'  # REAL*8
+                type_to = fortran_type
+
+                conversion_part_1, conversion_part_2 = self.get_conversion(type_from, type_to)
+
+                buffer += '\t\t\t' + part_1 + ' = ' + conversion_part_1 + part_2 + conversion_part_2
+                buffer += '\n'
+
+        return buffer
+
 
     """# names is self.in_names or self.param_names or self.out_names
     # same for widths, fortran_types and pscad_types
@@ -809,7 +889,7 @@ class Application(tk.Tk):
     # fichier_decoded = base64.b64decode(encoded_file)
     def create_fortran_code(self, type_modelinputs, type_modeloutputs, type_modelparameters,
                             finterface_function_prototype, variables_from_pscad,
-                            pointers_to_state_arrays, params_pscad_to_new_struct, outputs_storf_to_new_struct,
+                            params_pscad_to_new_struct, outputs_storf_to_new_struct,
                             outputs_init_pscad_to_new_struct, inputs_pscad_to_new_struct, state_arrays_to_storf,
                             outputs_new_to_storf, outputs_new_to_pscad):
         bf = ''
@@ -1025,7 +1105,9 @@ class Application(tk.Tk):
         bf += '\t! Other inputs\n' \
               '\tDOUBLE PRECISION, INTENT(IN) :: TRelease  ! Time to release initial output values\n' \
               '\tCHARACTER*(*), INTENT(IN) :: DLL_Path\n\n' \
+              '\t! --------------------------------\n' \
               '\t! Local variables\n' \
+              '\t! --------------------------------\n' \
               '\tINTEGER   :: i  ! Used for loops\n' \
               '\tINTEGER   :: retval  ! return value of DLL functions\n' \
               '\tINTEGER   :: retValFreeLib     ! Only for FreeLibrary\n' \
@@ -1052,29 +1134,26 @@ class Application(tk.Tk):
         if self.Model_Info.NumDoubleStates > 0:
             bf += '\tDOUBLE PRECISION, DIMENSION(' + str(self.Model_Info.NumDoubleStates) + '), TARGET :: STATED  ! To store IEEE CIGRE DoubleStates array\n'
 
-        bf += '\tINTEGER :: idx_start_statef  ! STORF start index to store float state variables\n' \
+        # todo remove use_interpolation
+        bf += '\tVariables for interpolation\n' \
+              '\tLOGICAL :: use_interpolation = .TRUE.  ! if inputs interpolation is checked in the PSCAD component form\n' \
+              '\tDOUBLE PRECISION :: Prev_t_pscad  ! Previous PSCAD time\n' \
+              '\tDOUBLE PRECISION ::delta_t1  ! Used to calculate interpolated inputs\n' \
+              '\tDOUBLE PRECISION ::delta_t2  ! Used to calculate interpolated inputs\n'
+
+        bf += self.generate_variables_declaration('', self.in_names, '_pscad_prev', self.in_pscad_types, self.in_width)
+        bf += '\n' \
+              '\tINTEGER :: idx_start_next_t_model  ! STORF start index to store Next_t_model\n' \
+              '\tINTEGER :: idx_start_statef  ! STORF start index to store float state variables\n' \
               '\tINTEGER :: idx_start_stated  ! STORF start index to store double state variables\n' \
-              '\tINTEGER :: idx_start_outputs  ! STORF start index to store outputs\n\n' \
-              '\t!Init STORF start indexes\n' \
-              '\tidx_start_statef = NSTORF + 1\n' \
-              '\tidx_start_stated = idx_start_statef + ' + str(self.Model_Info.NumFloatStates) + '\n' \
-              '\tidx_start_outputs = idx_start_stated + ' + str(self.Model_Info.NumDoubleStates) + '\n\n' \
-              '\t! Initialize Next_t_model.\n' \
-              '\t! TIMEZERO is True when time t = 0.0\n' \
-              '\t! If it\'s FIRSTSTEP but not TIMEZERO => Next_t_model = STORF(NSTORF)\n' \
-              '\tNext_t_model  = STORF(NSTORF)\n' \
-              '\tIF ( TIMEZERO ) THEN\n' \
-              '\t\tNext_t_model = 0\n' \
-              '\tENDIF\n\n' \
-              '\t! Set pointers to input/output/parameter structs\n' \
-              '\tpInstance%ExternalInputs     = c_loc(INPUTS_new)\n' \
-              '\tpInstance%Parameters         = c_loc(PARAMETERS_new)\n' \
-              '\tpInstance%ExternalOutputs    = c_loc(OUTPUTS_new)\n' \
-              '\tpInstance%Time               = TIME\n\n'
-
-        bf += pointers_to_state_arrays
-
-        bf += '\tIF (FIRST_CALL_THIS_FILE) THEN  ! Use FIRST_CALL_THIS_FILE to do following instruction once\n\n' \
+              '\tINTEGER :: idx_start_outputs  ! STORF start index to store outputs\n' \
+              '\tINTEGER :: idx_start_prev_t  ! STORF start index to store Prev_t_pscad\n' \
+              '\tINTEGER :: idx_start_inputs  ! STORF start index to store inputs\n' \
+              '\tINTEGER :: idx_start_next_model  ! STORF start index for the next model\n\n' \
+              '\t! --------------------------------\n' \
+              '\t! First, load the DLL and its functions and check static information. Do this only once\n' \
+              '\t! --------------------------------\n' \
+              '\tIF (FIRST_CALL_THIS_FILE) THEN  ! Use FIRST_CALL_THIS_FILE to do following instruction once\n\n' \
               '\t\t! Load dllHandle\n' \
               '\t\tCALL Get_DLL_Handle(DLL_Path)\n\n' \
               '\t\t! Set pointers to DLL functions\n' \
@@ -1119,17 +1198,72 @@ class Application(tk.Tk):
               '\t\t\tEND IF\n' \
               '\t\tEND DO\n\n' \
               '\t\tFIRST_CALL_THIS_FILE = .FALSE.\n\n' \
-              '\tENDIF\n\n' \
+              '\tENDIF\n\n'
 
-        # bf += params_change_check
-        bf += '\t! Assign parameters from the simulation tool side to model parameters\n' \
+        bf += '\tuse_interpolation = .TRUE.\n\n'  #todo remove
+
+        bf += '\t! --------------------------------\n' \
+              '\t! Initialize STORF start indexes\n' \
+              '\t! --------------------------------\n' \
+              '\tidx_start_next_t_model = NSTORF\n' \
+              '\tidx_start_statef = idx_start_next_t_model + 1\n' \
+              '\tidx_start_stated = idx_start_statef + ' + str(self.Model_Info.NumFloatStates) + '\n' \
+              '\tidx_start_outputs = idx_start_stated + ' + str(self.Model_Info.NumDoubleStates) + '\n' \
+              '\tidx_start_prev_t = idx_start_outputs + ' + str(self.nb_outputs_total) + '\n' \
+              '\tidx_start_inputs = idx_start_prev_t + 1\n' \
+              '\tidx_start_next_model = idx_start_inputs + ' + str(self.nb_inputs_total) + '\n\n' \
+              '\t! --------------------------------\n' \
+              '\t! Set pointers\n' \
+              '\t! --------------------------------\n' \
+              '\t! Set pointers to input/output/parameter structs\n' \
+              '\tpInstance%ExternalInputs     = c_loc(INPUTS_new)\n' \
+              '\tpInstance%Parameters         = c_loc(PARAMETERS_new)\n' \
+              '\tpInstance%ExternalOutputs    = c_loc(OUTPUTS_new)\n' \
+              '\t! Set pointers to state variable storage\n'
+
+        if self.Model_Info.NumIntStates > 0:
+            bf += '\tpInstance%IntStates    = c_loc(STATEI(1))\n'
+        if self.Model_Info.NumFloatStates > 0:
+            bf += '\tpInstance%FloatStates  = c_loc(STATEF(1))\n'
+        if self.Model_Info.NumDoubleStates > 0:
+            bf += '\tpInstance%DoubleStates = c_loc(STATED(1))\n'
+
+        bf += '\n' \
+              '\t! --------------------------------\n' \
+              '\t! Get saved values from STORF\n' \
+              '\t! --------------------------------\n' \
+              '\t! Get Next_t_model from STORF\n' \
+              '\tNext_t_model = STORF(idx_start_next_t_model)\n' \
+              '\tIF (TIMEZERO) THEN\n' \
+              '\t\tNext_t_model = 0\n' \
+              '\tENDIF\n' \
+              '\t! Get state values from STORF\n'
+
+        if self.Model_Info.NumIntStates > 0:
+            bf += '\tDO i = 1, ' + str(self.Model_Info.NumIntStates) + '\n'
+            bf += '\t\tSTATEI(i) = STORI(NSTORI + i - 1)\n'
+            bf += '\tEND DO\n'
+        if self.Model_Info.NumFloatStates > 0:
+            bf += '\tDO i = 1, ' + str(self.Model_Info.NumFloatStates) + '\n'
+            bf += '\t\tSTATEF(i) = STORF(idx_start_statef + i - 1)\n'
+            bf += '\tEND DO\n'
+        if self.Model_Info.NumDoubleStates > 0:
+            bf += '\tDO i = 1, ' + str(self.Model_Info.NumDoubleStates) + '\n'
+            bf += '\t\tSTATED(i) = STORF(idx_start_stated + i - 1)\n'
+            bf += '\tEND DO\n'
+
+        bf += '\t! Get output values from STORF\n'
+        bf += outputs_storf_to_new_struct
+        bf += '\t! Get prev_t (previous time value of pscad) and previous values of pscad inputs\n' \
+              '\tIF (use_interpolation) THEN\n' \
+              '\t\tPrev_t_pscad = STORF(idx_start_prev_t)\n'
+        bf += self.generate_storf_to_prev_inputs()
+        bf += '\tENDIF\n\n' \
+              '\tpInstance%Time = TIME\n\n' \
+              '\t! Assign parameters from the simulation tool side to model parameters\n' \
               '\t! Done before Model_FirstCall because this function may use the parameters\n'
 
         bf += params_pscad_to_new_struct + '\n'
-
-        bf += '\t! Same for outputs (stored after DoubleStates in STORF)\n'
-
-        bf += outputs_storf_to_new_struct + '\n'
 
         bf += '\t! FIRSTSTEP is True for first step starting from the Data file or Snapshot file.\n' \
               '\t! This part is outside the check if the model sampling time has been reached, by prevention.\n' \
@@ -1144,12 +1278,26 @@ class Application(tk.Tk):
               '\tENDIF\n\n' \
               '\t! Check if the model sampling time has been reached\n' \
               '\tIF ( TIME .GE. Next_t_model - EQUALITY_PRECISION ) THEN\n\n' \
-              '\t\t! Determine when the model should be initializing\n' \
-              '\t\tIsInitializing = .FALSE.\n' \
-              '\t\t! IF ( TIME .LE. TRelease ) should also work\n' \
-              '\t\tIF ( TIMEZERO .OR. (TIME .LE. TRelease) ) IsInitializing = .TRUE.\n\n' \
-              '\t\t! Initialize the models\n' \
-              '\t\tIF ( IsInitializing ) THEN\n' \
+              '\t\t! assign inputs from the simulation tool side to model inputs\n' \
+              '\t\tIF (use_interpolation .AND. .NOT. TIMEZERO) THEN\n' \
+              '\t\t\tdelta_t1 = TIME - Prev_t_pscad\n' \
+              '\t\t\tdelta_t2 = Next_t_model - Prev_t_pscad\n\n' \
+              '\t\t\tIF (delta_t1 .EQ. 0.0) THEN  ! TIME = Prev_t_pscad, should not happen\n' \
+              '\t\t\t\tWRITE(IUNIT,*) "*** Error in ",OrigModelNameShortened,": division by 0"\n' \
+              '\t\t\t\tSTOP\n' \
+              '\t\t\tENDIF\n\n'
+
+        bf += self.generate_interpolated_inputs()
+        bf += '\n' \
+              '\t\t\t! Update also time in the model (it can be used by the model)\n' \
+              '\t\t\tpInstance%Time = Next_t_model  ! Time is not PSCAD current time but Next_t_model\n' \
+              '\t\tELSE\n'
+
+        bf += inputs_pscad_to_new_struct + '\n'
+
+        bf += '\t\tENDIF\n\n' \
+              '\t\t! Check if the model must be initialized\n' \
+              '\t\tIF (TIMEZERO .OR. (TIME .LE. TRelease)) THEN\n' \
               '\t\t\t! assign initial values to model outputs provided through the component mask\n'
 
         bf += outputs_init_pscad_to_new_struct + '\n'
@@ -1157,25 +1305,47 @@ class Application(tk.Tk):
         bf += '\t\t\tretval = Model_Initialize(pInstance)\n' \
               '\t\t\tcall Handle_Message(pInstance, retval)\n' \
               '\t\tENDIF\n\n' \
-              '\t\t! assign inputs from the simulation tool side to model inputs\n'
-
-        bf += inputs_pscad_to_new_struct + '\n'
-
-        bf += '\t\t! Call ModelOutputs function every DELT_Model sampling time\n' \
+              '\t\t! Call ModelOutputs function every DELT_Model sampling time\n' \
               '\t\tretval = Model_Outputs(pInstance)\n' \
               '\t\tcall Handle_Message(pInstance, retval)\n\n' \
               '\t\tNext_t_model = Next_t_model + DELT_Model  ! Next_t_model indicates when the model will be called\n' \
               '\tENDIF\n\n' \
               '\t! --------------------------------\n' \
-              '\t! Put back into storage\n' \
+              '\t! Put back into STORF\n' \
               '\t! --------------------------------\n\n' \
-              '\tSTORF(NSTORF) = Next_t_model\n\n'
+              '\tSTORF(idx_start_next_t_model) = Next_t_model\n\n' \
+              '\t! Copy values from STATEx to STORx\n'
 
-        bf += state_arrays_to_storf + '\n'
+        if self.Model_Info.NumIntStates > 0:
+            bf += '\tDO i = 1, ' + str(self.Model_Info.NumIntStates) + '\n'
+            bf += '\t\tSTORI(NSTORI + i - 1) = STATEI(i)\n'
+            bf += '\tEND DO\n'
+        if self.Model_Info.NumFloatStates > 0:
+            bf += '\tDO i = 1, ' + str(self.Model_Info.NumFloatStates) + '\n'
+            bf += '\t\tSTORF(idx_start_statef + i - 1) = STATEF(i)\n'
+            bf += '\tEND DO\n'
+        if self.Model_Info.NumDoubleStates > 0:
+            bf += '\tDO i = 1, ' + str(self.Model_Info.NumDoubleStates) + '\n'
+            bf += '\t\tSTORF(idx_start_stated + i - 1) = STATED(i)\n'
+            bf += '\tEND DO\n'
 
-        bf += '\t! Outputs back into storage\n'
+        bf += '\t! Outputs into STORF\n'
 
-        bf += outputs_new_to_storf + '\n'
+        bf += outputs_new_to_storf
+
+        bf += '\t! Inputs and TIME into STORF\n' \
+              '\tIF (use_interpolation) THEN\n' \
+              '\t\tSTORF(idx_start_prev_t) = TIME\n'
+
+        #todo
+
+
+
+
+
+
+
+
 
         bf += '\t! Send back outputs values to PSCAD\n'
 
