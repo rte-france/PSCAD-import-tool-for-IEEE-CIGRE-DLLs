@@ -637,6 +637,39 @@ class Application(tk.Tk):
 
         return buffer
 
+    def generate_inputs_to_storf(self):
+        buffer = ''
+        # width_sum = sum(widths)
+        i_storf = 0
+        for i in range(0, self.Model_Info.NumInputPorts):
+            width = self.in_width[i]
+            name = self.in_names[i]
+            pscad_type = self.in_pscad_types[i]
+            # fortran_type = self.in_fortran_types[i]
+
+            part_2_base = name + '_pscad'
+
+            for j in range(1, width + 1):  # work also if width == 1
+
+                part_1 = 'STORF(idx_start_inputs + ' + str(i_storf) + ')'
+
+                if width == 1:
+                    part_2 = part_2_base
+                else:
+                    part_2 = part_2_base + '(' + str(j) + ')'
+
+                i_storf += 1
+
+                type_from = pscad_type
+                type_to = 'DOUBLE PRECISION'
+
+                conversion_part_1, conversion_part_2 = self.get_conversion(type_from, type_to)
+
+                buffer += '\t\t' + part_1 + ' = ' + conversion_part_1 + part_2 + conversion_part_2
+                buffer += '\n'
+
+        return buffer
+
 
     """# names is self.in_names or self.param_names or self.out_names
     # same for widths, fortran_types and pscad_types
@@ -1336,6 +1369,8 @@ class Application(tk.Tk):
         bf += '\t! Inputs and TIME into STORF\n' \
               '\tIF (use_interpolation) THEN\n' \
               '\t\tSTORF(idx_start_prev_t) = TIME\n'
+
+        bf += self.generate_inputs_to_storf()
 
         #todo
 
