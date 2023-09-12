@@ -347,7 +347,7 @@ class Application(tk.Tk):
         for name in self.out_names:
             buffer += name + '_init_pscad, '
 
-        buffer += 'TRelease, DLL_Path, Use_Interpolation, Print_Model_Info)'
+        buffer += 'TRelease, DLL_Path, Use_Interpolation)'
 
         return buffer
 
@@ -1108,8 +1108,7 @@ class Application(tk.Tk):
         bf += '\t! Other inputs\n' \
               '\tDOUBLE PRECISION, INTENT(IN) :: TRelease  ! Time to release initial output values\n' \
               '\tCHARACTER*(*), INTENT(IN) :: DLL_Path\n' \
-              '\tLOGICAL, INTENT(IN) :: Use_Interpolation  ! if inputs interpolation is checked in the PSCAD component form\n' \
-              '\tLOGICAL, INTENT(IN) :: Print_Model_Info  ! if print model info is checked in the PSCAD component form\n\n' \
+              '\tLOGICAL, INTENT(IN) :: Use_Interpolation  ! if inputs interpolation is checked in the PSCAD component form\n\n' \
               '\t! --------------------------------\n' \
               '\t! Local variables\n' \
               '\t! --------------------------------\n' \
@@ -1172,10 +1171,8 @@ class Application(tk.Tk):
               '\t\t! Transfer the C pointer to the F pointer\n' \
               '\t\tcall c_f_pointer(Model_Info_cp, Model_Info_fp)\n\n' \
               '\t\t! Call DLL routine to Print DLL Model Information\n' \
-              '\t\tIF (Print_Model_Info) THEN\n' \
-              '\t\t\tretval = Model_PrintInfo()\n' \
-              '\t\t\tcall Handle_Message(pInstance, retval)\n' \
-              '\t\tENDIF\n\n' \
+              '\t\tretval = Model_PrintInfo()\n' \
+              '\t\tcall Handle_Message(pInstance, retval)\n\n' \
               '\t\t! Extract the control code sampling step size (Seconds)\n' \
               '\t\tDELT_Model = Model_Info_fp.FixedStepBaseSampleTime\n\n' \
               '\t\t! Error if the time step required by the controls is smaller than the simulation time step\n' \
@@ -1584,8 +1581,6 @@ class Application(tk.Tk):
         #                                  value='.FALSE.', help=help_interp)
         category["Configuration"].logical("Use_Interpolation", description='Use linear interpolation of inputs',
                                           value='.FALSE.')
-        category["Configuration"].logical("Print_Model_Info", description='Print model information in runtime messages at the start of the simulation',
-                                          value='.TRUE.')
 
         model_parameters = category.add("Model Parameters")
         for i in range(len(self.param_names)):
@@ -1695,7 +1690,7 @@ class Application(tk.Tk):
         for name in out_init_names:
             script += '$' + name + ', '
 
-        script += '$TRelease, "$DLL_Path", $Use_Interpolation, $Print_Model_Info)'
+        script += '$TRelease, "$DLL_Path", $Use_Interpolation)'
 
         wizard.script['Fortran'] = script
 
