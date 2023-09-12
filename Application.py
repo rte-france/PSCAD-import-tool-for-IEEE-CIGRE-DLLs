@@ -51,6 +51,7 @@ class Application(tk.Tk):
         self.in_width = []
 
         self.out_names = []
+        self.out_units = []
         self.out_fortran_types = []
         self.out_pscad_types = []  # INTEGER or REAL
         self.out_width = []
@@ -111,6 +112,7 @@ class Application(tk.Tk):
         self.in_width = []
 
         self.out_names = []
+        self.out_units = []
         self.out_fortran_types = []
         self.out_pscad_types = []
         self.out_width = []
@@ -191,6 +193,11 @@ class Application(tk.Tk):
                 raise Exception('One of the outputs has no Name, it is forbidden')
             name = signal.Name.decode("utf-8")
             name = self.remove_forbidden_char(name)
+            if signal.Unit is None:
+                unit = ''
+            else:
+                unit = signal.Unit.decode("utf-8")
+            self.out_units.append(unit)
             datatype = signal.DataType  # ex: IEEE_Cigre_DLLInterface_DataType_int8_T
             if datatype is None:
                 raise Exception('One of the outputs has no DataType, it is forbidden')
@@ -1608,14 +1615,21 @@ class Application(tk.Tk):
 
         initial_conditions = category.add('Initial Conditions')
         initial_conditions.real("TRelease", description='TRelease - Time to release initial conditions (sec)',
-                                value=0, minimum=0, maximum=1E+308, units='sec')
+                                value='0 [sec]', minimum=0, maximum=1E+308, units='sec')
 
         for i in range(len(self.out_names)):
             out_name = self.out_names[i]
+            out_unit = self.out_units[i]
+            # param_default_value = self.param_default_values[i]
+
             out_pscad_type = self.out_pscad_types[i]  # INTEGER or REAL
             p_name = out_name + '_init'
             p_description = p_name + ' - Initial value of the output: ' + out_name
-            p_value = 0
+
+            if out_unit != '':
+                p_value = '0 [' + out_unit + ']'
+            else:
+                p_value = 0
 
             if out_pscad_type == 'INTEGER':
                 initial_conditions.integer(p_name, description=p_description, value=p_value)
