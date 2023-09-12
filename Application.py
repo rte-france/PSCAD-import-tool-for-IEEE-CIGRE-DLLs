@@ -13,7 +13,7 @@ import ctypes
 # https://www.pscad.com/webhelp-v501-al/index.html
 # https://www.pscad.com/webhelp-v5-al/tutorial/index.html
 import mhi.pscad
-from mhi.pscad import OverlayGraph, graphics, Component
+#from mhi.pscad import OverlayGraph, graphics, Component
 from mhi.pscad.wizard import UserDefnWizard, Signal
 
 # For PSCAD automation V4
@@ -42,7 +42,6 @@ class Application(tk.Tk):
         self.Model_Name = None
         self.Model_Name_Shortened = None
         self.DLLInterfaceVersion = None  # An array of 4 integers
-        #self.DLLInterfaceVersionStr = None  # The string version of DLLInterfaceVersion, ex: '1.1.0.0'
         # No pandas df used because heavy package when building in exe
         #self.in_df = None  # Dataframe inputs
         #self.out_df = None  # Dataframe outputs
@@ -126,10 +125,6 @@ class Application(tk.Tk):
 
         self.list_label_errors = []
 
-        self.nb_inputs_total = 0
-        self.nb_outputs_total = 0
-        self.nb_params_total = 0
-
     def generate_pscad_model(self):
         self.clean_attributes()
 
@@ -150,81 +145,7 @@ class Application(tk.Tk):
 
             self.fill_in_out_param_lists()
 
-            """type_modelinputs = self.generate_type('ModelInputs',
-                                                  self.Model_Info.NumInputPorts, self.Model_Info.InputPortsInfo)
-
-            type_modeloutputs = self.generate_type('ModelOutputs',
-                                                   self.Model_Info.NumOutputPorts, self.Model_Info.OutputPortsInfo)
-
-            type_modelparameters = self.generate_type('ModelParameters',
-                                                      self.Model_Info.NumParameters, self.Model_Info.ParametersInfo)"""
-            #storfloat_declaration = self.generate_storfloat_declaration()
-            type_modelinputs = self.generate_type('ModelInputs', self.in_names, self.in_fortran_types, self.in_width)
-            type_modeloutputs = self.generate_type('ModelOutputs', self.out_names, self.out_fortran_types, self.out_width)
-            type_modelparameters = self.generate_type('ModelParameters', self.param_names, self.param_fortran_types)
-            finterface_function_prototype = self.generate_finterface_function_prototype()
-            variables_from_pscad = self.generate_variables_from_pscad()
-            # storfloat_code = self.generate_storfloat_code()
-            #pointers_to_state_arrays = self.generate_pointers_to_state_arrays()
-            """params_pscad_to_new_struct = self.generate_conversion(self.param_names, None, self.param_fortran_types,
-                                                                  self.param_pscad_types, False, True, 'PARAMETERS_new')
-            outputs_storf_to_new_struct = self.generate_conversion(self.out_names, self.out_width, self.out_fortran_types,
-                                                                  self.out_pscad_types, True, True, 'OUTPUTS_new')
-
-            inputs_pscad_to_new_struct = self.generate_conversion(self.in_names, self.in_width,
-                                                                   self.in_fortran_types,
-                                                                   self.in_pscad_types, False, True, 'INPUTS_new')
-
-            inputs_pscad_to_new_struct = inputs_pscad_to_new_struct.replace('\t', '\t\t')  # double tab for this part
-
-            outputs_new_to_storf = self.generate_conversion(self.out_names, self.out_width,
-                                                                  self.out_fortran_types,
-                                                                  self.out_pscad_types, True, False, 'OUTPUTS_new')
-
-            outputs_new_to_pscad = self.generate_conversion(self.out_names, self.out_width,
-                                                            self.out_fortran_types,
-                                                            self.out_pscad_types, False, False, 'OUTPUTS_new')"""
-
-            # params_change_check = self.generate_parameters_change_check()
-
-            params_pscad_to_new_struct = self.generate_conversion(self.param_names, None, self.param_fortran_types,
-                                                                  self.param_pscad_types, '_pscad', True, 'PARAMETERS_new')
-
-            outputs_storf_to_new_struct = self.generate_conversion(self.out_names, self.out_width,
-                                                                   self.out_fortran_types,
-                                                                   self.out_pscad_types, None, True, 'OUTPUTS_new')
-
-            outputs_init_pscad_to_new_struct = self.generate_conversion(self.out_names, self.out_width,
-                                                                        self.out_fortran_types,
-                                                                        self.out_pscad_types, '_init_pscad', True,
-                                                                        'OUTPUTS_new')
-
-            outputs_init_pscad_to_new_struct = outputs_init_pscad_to_new_struct.replace('\t',
-                                                                                        '\t\t\t')  # triple tab for this part
-
-            inputs_pscad_to_new_struct = self.generate_conversion(self.in_names, self.in_width,
-                                                                  self.in_fortran_types,
-                                                                  self.in_pscad_types, '_pscad', True, 'INPUTS_new')
-
-            inputs_pscad_to_new_struct = inputs_pscad_to_new_struct.replace('\t', '\t\t\t')  # double tab for this part
-
-            #storfloat_to_storf = self.generate_storfloat_to_storf()
-            #state_arrays_to_storf = self.generate_state_arrays_to_storf()
-
-            outputs_new_to_storf = self.generate_conversion(self.out_names, self.out_width,
-                                                            self.out_fortran_types,
-                                                            self.out_pscad_types, None, False, 'OUTPUTS_new')
-
-            outputs_new_to_pscad = self.generate_conversion(self.out_names, self.out_width,
-                                                            self.out_fortran_types,
-                                                            self.out_pscad_types, '_pscad', False, 'OUTPUTS_new')
-
-            buffer = self.create_fortran_code(type_modelinputs, type_modeloutputs, type_modelparameters,
-                                              finterface_function_prototype, variables_from_pscad,
-                                              params_pscad_to_new_struct,
-                                              outputs_storf_to_new_struct, outputs_init_pscad_to_new_struct,
-                                              inputs_pscad_to_new_struct, outputs_new_to_storf,
-                                              outputs_new_to_pscad)
+            buffer = self.create_fortran_code()
 
             with open(self.fortran_interface_file_path, 'w') as f:
                 f.write(buffer)  # allow rewrite on existing file
@@ -910,7 +831,6 @@ class Application(tk.Tk):
 
         return conversion_part_1, conversion_part_2
 
-
     # We could also convert a text file to a base64 encoded string and then save the base64 encoded string
     # as a Python module
     # import base64
@@ -920,13 +840,9 @@ class Application(tk.Tk):
     #     f.write('encoded_file = b"' + encoded_file.decode('ascii') + '"')
     # from my_file import encoded_file
     # fichier_decoded = base64.b64decode(encoded_file)
-    def create_fortran_code(self, type_modelinputs, type_modeloutputs, type_modelparameters,
-                            finterface_function_prototype, variables_from_pscad,
-                            params_pscad_to_new_struct, outputs_storf_to_new_struct,
-                            outputs_init_pscad_to_new_struct, inputs_pscad_to_new_struct,
-                            outputs_new_to_storf, outputs_new_to_pscad):
+    def create_fortran_code(self):
         bf = ''
-        bf += ('\t! Common module for each instance of ' + self.Model_Name_Shortened + ' model\n' \
+        bf += '\t! Common module for each instance of ' + self.Model_Name_Shortened + ' model\n' \
               '\tMODULE ' + self.Model_Name_Shortened + '_MOD\n\n' \
               '\tUSE, INTRINSIC :: iso_c_binding, only : c_ptr, c_double, c_int8_t, c_int32_t\n' \
               '\tUSE IFWIN ! To use INTEGER(handle)\n\n' \
@@ -982,7 +898,11 @@ class Application(tk.Tk):
               '\t!--- Types specific to a model ---\n' \
               '\t!---------------------------------\n' \
               '\t! See Fortran C equivalent here: https://docs.oracle.com/cd/E19957-01/805-4940/z40009104412/index.html\n' \
-              '\t! We could also used types with kind type parameters from the ISO_C_BINDING module\n')
+              '\t! We could also used types with kind type parameters from the ISO_C_BINDING module\n'
+
+        type_modelinputs = self.generate_type('ModelInputs', self.in_names, self.in_fortran_types, self.in_width)
+        type_modeloutputs = self.generate_type('ModelOutputs', self.out_names, self.out_fortran_types, self.out_width)
+        type_modelparameters = self.generate_type('ModelParameters', self.param_names, self.param_fortran_types)
 
         bf += type_modelinputs + '\n\n' + type_modeloutputs + '\n\n' + type_modelparameters + '\n\n'
 
@@ -1124,6 +1044,8 @@ class Application(tk.Tk):
               '\t\tend function\n\n' \
               '\tEND MODULE ' + self.Model_Name_Shortened + '_MOD\n\n\n\n'
 
+        finterface_function_prototype = self.generate_finterface_function_prototype()
+
         bf += finterface_function_prototype + '\n\n'
 
         bf += '\tUSE, INTRINSIC :: iso_c_binding, only : c_ptr, c_f_pointer, c_loc\n\n' \
@@ -1132,6 +1054,8 @@ class Application(tk.Tk):
               '\tINCLUDE \'emtstor.h\' ! This include gives us access to STORI, STORF, NSTORI, NSTORF\n\n' \
               '\tIMPLICIT NONE\n\n' \
               '\t! Inputs, params and outputs variables, received from PSCAD\n'
+
+        variables_from_pscad = self.generate_variables_from_pscad()
 
         bf += variables_from_pscad + '\n'
 
@@ -1285,6 +1209,10 @@ class Application(tk.Tk):
             bf += '\tEND DO\n'
 
         bf += '\t! Get output values from STORF\n'
+
+        outputs_storf_to_new_struct = self.generate_conversion(self.out_names, self.out_width, self.out_fortran_types,
+                                                               self.out_pscad_types, None, True,
+                                                               'OUTPUTS_new')
         bf += outputs_storf_to_new_struct
         bf += '\t! Get prev_t (previous time value of pscad) and previous values of pscad inputs\n' \
               '\tIF (Use_Interpolation) THEN\n' \
@@ -1294,6 +1222,10 @@ class Application(tk.Tk):
               '\tpInstance%Time = TIME\n\n' \
               '\t! Assign parameters from the simulation tool side to model parameters\n' \
               '\t! Done before Model_FirstCall because this function may use the parameters\n'
+
+        params_pscad_to_new_struct = self.generate_conversion(self.param_names, None, self.param_fortran_types,
+                                                              self.param_pscad_types, '_pscad', True,
+                                                              'PARAMETERS_new')
 
         bf += params_pscad_to_new_struct + '\n'
 
@@ -1325,12 +1257,24 @@ class Application(tk.Tk):
               '\t\t\tpInstance%Time = Next_t_model  ! Time is not PSCAD current time but Next_t_model\n' \
               '\t\tELSE\n'
 
+        inputs_pscad_to_new_struct = self.generate_conversion(self.in_names, self.in_width, self.in_fortran_types,
+                                                              self.in_pscad_types, '_pscad', True,
+                                                              'INPUTS_new')
+
+        inputs_pscad_to_new_struct = inputs_pscad_to_new_struct.replace('\t', '\t\t\t')
+
         bf += inputs_pscad_to_new_struct
 
         bf += '\t\tENDIF\n\n' \
               '\t\t! Check if the model must be initialized\n' \
               '\t\tIF (TIMEZERO .OR. (TIME .LE. TRelease)) THEN\n' \
               '\t\t\t! assign initial values to model outputs provided through the component mask\n'
+
+        outputs_init_pscad_to_new_struct = self.generate_conversion(self.out_names, self.out_width, self.out_fortran_types,
+                                                                    self.out_pscad_types, '_init_pscad', True,
+                                                                    'OUTPUTS_new')
+
+        outputs_init_pscad_to_new_struct = outputs_init_pscad_to_new_struct.replace('\t', '\t\t\t')
 
         bf += outputs_init_pscad_to_new_struct + '\n'
 
@@ -1363,6 +1307,10 @@ class Application(tk.Tk):
 
         bf += '\t! Outputs into STORF\n'
 
+        outputs_new_to_storf = self.generate_conversion(self.out_names, self.out_width, self.out_fortran_types,
+                                                        self.out_pscad_types, None, False,
+                                                        'OUTPUTS_new')
+
         bf += outputs_new_to_storf
 
         bf += '\t! Inputs and TIME into STORF\n' \
@@ -1373,6 +1321,10 @@ class Application(tk.Tk):
 
         bf += '\tENDIF\n\n' \
               '\t! Send back outputs values to PSCAD\n'
+
+        outputs_new_to_pscad = self.generate_conversion(self.out_names, self.out_width, self.out_fortran_types,
+                                                        self.out_pscad_types, '_pscad', False,
+                                                        'OUTPUTS_new')
 
         bf += outputs_new_to_pscad + '\n'
 
@@ -1477,12 +1429,7 @@ class Application(tk.Tk):
             raise Exception('ieee_cigre_datatype_to_pscad_param_type_str : error in dataType_enum: ' + str(datatype))
 
     def get_dll_interface_version(self):
-        #self.DLLInterfaceVersion = self.Model_Info.DLLInterfaceVersion  # ex: [1, 1, 0, 0]
         self.DLLInterfaceVersion = [int(x) for x in self.Model_Info.DLLInterfaceVersion]  # ex: [1, 1, 0, 0]
-
-        # example: 1.1.0.0
-        #self.DLLInterfaceVersionStr = str(DLLInterfaceVersion[0]) + '.' + str(DLLInterfaceVersion[1]) + '.' + str(
-        #    DLLInterfaceVersion[2]) + '.' + str(DLLInterfaceVersion[3])
 
     # Check if this import tool is compatible with the version of the IEEE CIGRE DLL Interface
     # For now, it is only compatible with 1.1.0.0
@@ -1491,15 +1438,6 @@ class Application(tk.Tk):
             DLLInterfaceVersionStr = '.'.join(map(str, self.DLLInterfaceVersion))
             raise Exception('DLLInterfaceVersion is not correct. This import tool is compatible with 1.1.0.0 but the'
                             ' DLL interface version is ' + DLLInterfaceVersionStr)
-
-        """if self.DLLInterfaceVersionStr != '1.1.0.0':
-            raise Exception('DLLInterfaceVersion is not correct. This import tool is compatible with 1.1.0.0 but the'
-                            ' DLL interface versin is ' + self.DLLInterfaceVersionStr)"""
-
-        """DLLInterfaceVersion = self.Model_Info.DLLInterfaceVersion
-        if DLLInterfaceVersion[0] != 1 or DLLInterfaceVersion[1] != 1 or DLLInterfaceVersion[2] != 0 \
-                or DLLInterfaceVersion[3] != 0:
-            raise Exception('DLLInterfaceVersion is not correct')"""
 
     def display_error(self, error):
 
