@@ -1585,10 +1585,15 @@ class Application(tk.Tk):
             param_group_name = self.param_group_names[i]
             param_description = param_name + ' - ' + self.param_descriptions[i]
             param_unit = self.param_units[i]
-            param_default_value = self.param_default_values[i]
+            #param_default_value = self.param_default_values[i]
+            if param_unit != '':
+                param_default_value = str(self.param_default_values[i]) + ' [' + param_unit + ']'
+            else:
+                param_default_value = self.param_default_values[i]
             param_min_value = self.param_min_values[i]
             param_max_value = self.param_max_values[i]
             if param_pscad_type == 'INTEGER':
+                # No units for integer...
                 model_parameters.integer(param_name, description=param_description, value=param_default_value,
                                          minimum=param_min_value, maximum=param_max_value, group=param_group_name)
             elif param_pscad_type == 'REAL':
