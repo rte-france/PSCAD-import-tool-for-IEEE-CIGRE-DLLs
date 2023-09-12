@@ -58,6 +58,7 @@ class Application(tk.Tk):
         self.param_names = []
         self.param_fortran_types = []
         self.param_pscad_types = []  # For an IEEE CIGRE DLL, it can be INTEGER, REAL or CHARACTER(*)
+        self.param_group_names = []
         self.param_descriptions = []
         self.param_units = []
         self.param_fixedValue = []  # int, keep it in case of calling Model_CheckParameters each time parameters have really changed
@@ -117,6 +118,7 @@ class Application(tk.Tk):
         self.param_names = []
         self.param_fortran_types = []
         self.param_pscad_types = []
+        self.param_group_names = []
         self.param_descriptions = []
         self.param_units = []
         self.param_default_values = []
@@ -162,12 +164,18 @@ class Application(tk.Tk):
     def fill_in_out_param_lists(self):
         for i in range(0, self.Model_Info.NumInputPorts):
             signal = self.Model_Info.InputPortsInfo[i]
+            if signal.Name is None:
+                raise Exception('One of the inputs has no Name, it is forbidden')
             name = signal.Name.decode("utf-8")
             name = self.remove_forbidden_char(name)
             datatype = signal.DataType  # ex: IEEE_Cigre_DLLInterface_DataType_int8_T
+            if datatype is None:
+                raise Exception('One of the inputs has no DataType, it is forbidden')
             self.in_names.append(name)
             try:
-                width = signal.Width  # parameters have no width attribute
+                width = signal.Width  # because parameters have no width attribute
+                if width is None:
+                    width = 1
             except Exception as e:
                 width = 1
             self.in_width.append(width)
@@ -179,12 +187,18 @@ class Application(tk.Tk):
 
         for i in range(0, self.Model_Info.NumOutputPorts):
             signal = self.Model_Info.OutputPortsInfo[i]
+            if signal.Name is None:
+                raise Exception('One of the outputs has no Name, it is forbidden')
             name = signal.Name.decode("utf-8")
             name = self.remove_forbidden_char(name)
             datatype = signal.DataType  # ex: IEEE_Cigre_DLLInterface_DataType_int8_T
+            if datatype is None:
+                raise Exception('One of the outputs has no DataType, it is forbidden')
             self.out_names.append(name)
             try:
-                width = signal.Width  # parameters have no width attribute
+                width = signal.Width  # because parameters have no width attribute
+                if width is None:
+                    width = 1
             except Exception as e:
                 width = 1
             self.out_width.append(width)
@@ -196,12 +210,36 @@ class Application(tk.Tk):
 
         for i in range(0, self.Model_Info.NumParameters):
             parameter = self.Model_Info.ParametersInfo[i]
+            if parameter.Name is None:
+                raise Exception('One of the parameters has no Name, it is forbidden')
             name = parameter.Name.decode("utf-8")
             name = self.remove_forbidden_char(name)
             datatype = parameter.DataType  # ex: IEEE_Cigre_DLLInterface_DataType_int8_T
-            description = parameter.Description.decode("utf-8")
-            unit = parameter.Unit.decode("utf-8")
-            fixedValue = parameter.FixedValue  # is int, keep it in case of calling Model_CheckParameters each time parameters have really changed
+            if datatype is None:
+                raise Exception('One of the parameters has no DataType, it is forbidden')
+            if parameter.GroupName is None:
+                group_name = ''  # Will be in General group by default
+            else:
+                group_name = parameter.GroupName.decode("utf-8")
+            if parameter.Description is None:
+                description = ''
+            else:
+                description = parameter.Description.decode("utf-8")
+            if parameter.Unit is None:
+                unit = ''
+            else:
+                unit = parameter.Unit.decode("utf-8")
+            if parameter.FixedValue is None:
+                fixedValue = 0
+            else:
+                fixedValue = parameter.FixedValue  # is int, keep it in case of calling Model_CheckParameters each time parameters have really changed
+
+            if parameter.DefaultValue is None:
+                raise Exception('One of the parameters has no DefaultValue, it is forbidden')
+            if parameter.MinValue is None:
+                raise Exception('One of the parameters has no MinValue, it is forbidden')
+            if parameter.MaxValue is None:
+                raise Exception('One of the parameters has no MaxValue, it is forbidden')
             default_value = self.get_parameter_default_min_or_max_value(parameter.DefaultValue, datatype)
             # IEEE CIGRE DLL allows min max value for strings
             min_value = self.get_parameter_default_min_or_max_value(parameter.MinValue, datatype)
@@ -218,6 +256,7 @@ class Application(tk.Tk):
             self.param_fortran_types.append(fortran_type_str)
             pscad_type_str = self.ieee_cigre_datatype_to_pscad_param_type_str(datatype)
             self.param_pscad_types.append(pscad_type_str)
+            self.param_group_names.append(group_name)
             self.param_descriptions.append(description)
             self.param_units.append(unit)
             self.param_fixedValue.append(fixedValue)
@@ -1543,6 +1582,7 @@ class Application(tk.Tk):
         for i in range(len(self.param_names)):
             param_name = self.param_names[i]
             param_pscad_type = self.param_pscad_types[i]  # For an IEEE CIGRE DLL, it can be INTEGER, REAL or CHARACTER(*)
+            param_group_name = self.param_group_names[i]
             param_description = param_name + ' - ' + self.param_descriptions[i]
             param_unit = self.param_units[i]
             param_default_value = self.param_default_values[i]
@@ -1550,12 +1590,14 @@ class Application(tk.Tk):
             param_max_value = self.param_max_values[i]
             if param_pscad_type == 'INTEGER':
                 model_parameters.integer(param_name, description=param_description, value=param_default_value,
-                                         minimum=param_min_value, maximum=param_max_value)
+                                         minimum=param_min_value, maximum=param_max_value, group=param_group_name)
             elif param_pscad_type == 'REAL':
                 model_parameters.real(param_name, description=param_description, value=param_default_value,
-                                         minimum=param_min_value, maximum=param_max_value, units=param_unit)
+                                      minimum=param_min_value, maximum=param_max_value, units=param_unit,
+                                      group=param_group_name)
             elif param_pscad_type == 'CHARACTER(*)':
-                model_parameters.text(param_name, description=param_description, value=param_default_value)
+                model_parameters.text(param_name, description=param_description, value=param_default_value,
+                                      group=param_group_name)
             else:
                 raise Exception('Unknown PSCAD type for parameter: ' + param_name)
 
