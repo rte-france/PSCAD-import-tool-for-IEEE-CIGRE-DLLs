@@ -223,7 +223,7 @@ class Application(tk.Tk):
                                               finterface_function_prototype, variables_from_pscad,
                                               params_pscad_to_new_struct,
                                               outputs_storf_to_new_struct, outputs_init_pscad_to_new_struct,
-                                              inputs_pscad_to_new_struct, state_arrays_to_storf, outputs_new_to_storf,
+                                              inputs_pscad_to_new_struct, outputs_new_to_storf,
                                               outputs_new_to_pscad)
 
             with open(self.fortran_interface_file_path, 'w') as f:
@@ -380,7 +380,7 @@ class Application(tk.Tk):
         for name in self.out_names:
             buffer += name + '_init_pscad, '
 
-        buffer += 'TRelease, DLL_Path)'
+        buffer += 'TRelease, DLL_Path, Use_Interpolation)'
 
         return buffer
 
@@ -923,7 +923,7 @@ class Application(tk.Tk):
     def create_fortran_code(self, type_modelinputs, type_modeloutputs, type_modelparameters,
                             finterface_function_prototype, variables_from_pscad,
                             params_pscad_to_new_struct, outputs_storf_to_new_struct,
-                            outputs_init_pscad_to_new_struct, inputs_pscad_to_new_struct, state_arrays_to_storf,
+                            outputs_init_pscad_to_new_struct, inputs_pscad_to_new_struct,
                             outputs_new_to_storf, outputs_new_to_pscad):
         bf = ''
         bf += ('\t! Common module for each instance of ' + self.Model_Name_Shortened + ' model\n' \
@@ -1137,7 +1137,8 @@ class Application(tk.Tk):
 
         bf += '\t! Other inputs\n' \
               '\tDOUBLE PRECISION, INTENT(IN) :: TRelease  ! Time to release initial output values\n' \
-              '\tCHARACTER*(*), INTENT(IN) :: DLL_Path\n\n' \
+              '\tCHARACTER*(*), INTENT(IN) :: DLL_Path\n' \
+              '\tLOGICAL, INTENT(IN) :: Use_Interpolation  ! if inputs interpolation is checked in the PSCAD component form\n\n' \
               '\t! --------------------------------\n' \
               '\t! Local variables\n' \
               '\t! --------------------------------\n' \
@@ -1146,7 +1147,6 @@ class Application(tk.Tk):
               '\tINTEGER   :: retValFreeLib     ! Only for FreeLibrary\n' \
               '\tTYPE(IEEE_Cigre_DLLInterface_Instance) :: pInstance\n' \
               '\tDOUBLE PRECISION :: Next_t_model ! To know when to call model output function\n' \
-              '\tLOGICAL        :: IsInitializing    ! bool when the model is initializing\n' \
               '\tTYPE(c_ptr)                                           :: Model_Info_cp ! The C pointer of Model_GetInfo\n' \
               '\tTYPE(IEEE_Cigre_DLLInterface_Model_Info), POINTER     :: Model_Info_fp ! The F pointer of Model_GetInfo\n' \
               '\tTYPE(ModelInputs), TARGET     :: INPUTS_new\n' \
@@ -1168,8 +1168,7 @@ class Application(tk.Tk):
             bf += '\tDOUBLE PRECISION, DIMENSION(' + str(self.Model_Info.NumDoubleStates) + '), TARGET :: STATED  ! To store IEEE CIGRE DoubleStates array\n'
 
         # todo remove use_interpolation
-        bf += '\tVariables for interpolation\n' \
-              '\tLOGICAL :: use_interpolation = .TRUE.  ! if inputs interpolation is checked in the PSCAD component form\n' \
+        bf += '\t! Variables for interpolation\n' \
               '\tDOUBLE PRECISION :: Prev_t_pscad  ! Previous PSCAD time\n' \
               '\tDOUBLE PRECISION ::delta_t1  ! Used to calculate interpolated inputs\n' \
               '\tDOUBLE PRECISION ::delta_t2  ! Used to calculate interpolated inputs\n'
@@ -1233,7 +1232,7 @@ class Application(tk.Tk):
               '\t\tFIRST_CALL_THIS_FILE = .FALSE.\n\n' \
               '\tENDIF\n\n'
 
-        bf += '\tuse_interpolation = .TRUE.\n\n'  #todo remove
+        #bf += '\tuse_interpolation = .TRUE.\n\n'
 
         bf += '\t! --------------------------------\n' \
               '\t! Initialize STORF start indexes\n' \
@@ -1288,7 +1287,7 @@ class Application(tk.Tk):
         bf += '\t! Get output values from STORF\n'
         bf += outputs_storf_to_new_struct
         bf += '\t! Get prev_t (previous time value of pscad) and previous values of pscad inputs\n' \
-              '\tIF (use_interpolation) THEN\n' \
+              '\tIF (Use_Interpolation) THEN\n' \
               '\t\tPrev_t_pscad = STORF(idx_start_prev_t)\n'
         bf += self.generate_storf_to_prev_inputs()
         bf += '\tENDIF\n\n' \
@@ -1312,7 +1311,7 @@ class Application(tk.Tk):
               '\t! Check if the model sampling time has been reached\n' \
               '\tIF ( TIME .GE. Next_t_model - EQUALITY_PRECISION ) THEN\n\n' \
               '\t\t! assign inputs from the simulation tool side to model inputs\n' \
-              '\t\tIF (use_interpolation .AND. .NOT. TIMEZERO) THEN\n' \
+              '\t\tIF (Use_Interpolation .AND. .NOT. TIMEZERO) THEN\n' \
               '\t\t\tdelta_t1 = TIME - Prev_t_pscad\n' \
               '\t\t\tdelta_t2 = Next_t_model - Prev_t_pscad\n\n' \
               '\t\t\tIF (delta_t1 .EQ. 0.0) THEN  ! TIME = Prev_t_pscad, should not happen\n' \
@@ -1326,7 +1325,7 @@ class Application(tk.Tk):
               '\t\t\tpInstance%Time = Next_t_model  ! Time is not PSCAD current time but Next_t_model\n' \
               '\t\tELSE\n'
 
-        bf += inputs_pscad_to_new_struct + '\n'
+        bf += inputs_pscad_to_new_struct
 
         bf += '\t\tENDIF\n\n' \
               '\t\t! Check if the model must be initialized\n' \
@@ -1345,8 +1344,8 @@ class Application(tk.Tk):
               '\tENDIF\n\n' \
               '\t! --------------------------------\n' \
               '\t! Put back into STORF\n' \
-              '\t! --------------------------------\n\n' \
-              '\tSTORF(idx_start_next_t_model) = Next_t_model\n\n' \
+              '\t! --------------------------------\n' \
+              '\tSTORF(idx_start_next_t_model) = Next_t_model\n' \
               '\t! Copy values from STATEx to STORx\n'
 
         if self.Model_Info.NumIntStates > 0:
@@ -1367,22 +1366,13 @@ class Application(tk.Tk):
         bf += outputs_new_to_storf
 
         bf += '\t! Inputs and TIME into STORF\n' \
-              '\tIF (use_interpolation) THEN\n' \
+              '\tIF (Use_Interpolation) THEN\n' \
               '\t\tSTORF(idx_start_prev_t) = TIME\n'
 
         bf += self.generate_inputs_to_storf()
 
-        #todo
-
-
-
-
-
-
-
-
-
-        bf += '\t! Send back outputs values to PSCAD\n'
+        bf += '\tENDIF\n\n' \
+              '\t! Send back outputs values to PSCAD\n'
 
         bf += outputs_new_to_pscad + '\n'
 
@@ -1404,11 +1394,7 @@ class Application(tk.Tk):
         if NumIntStates > 0:
             bf += '\tNSTORI = NSTORI + ' + str(NumIntStates) + ' ! # of integer states used in the dll\n'
 
-        #NumFloatStates = self.Model_Info.NumFloatStates
-        #NumDoubleStates = self.Model_Info.NumDoubleStates
-        nb_outputs_total = sum(self.out_width)
-        #bf += '\tNSTORF = NSTORF + 1 + ' + str(NumFloatStates) + ' + ' + str(NumDoubleStates) + ' + ' + str(nb_outputs_total) + ' ! STORF contains Next_t_model, float states, double states, outputs \n\n'
-        bf += '\tNSTORF = idx_start_outputs + ' + str(nb_outputs_total) + '  ! STORF contains Next_t_model, float states, double states, outputs\n\n'
+        bf += '\tNSTORF = idx_start_next_model\n\n'
         bf += '\tEND\n\n'
 
         return bf
@@ -1604,6 +1590,16 @@ class Application(tk.Tk):
         wizard.parameter["Name"].value = self.Model_Name_Shortened
         wizard.parameter["Name"].visible = False
         category["Configuration"].text("DLL_Path", description='DLL Path', value='..\\' + self.dll_file_name)
+        # help does not work...
+        # help_interp = ('Input signals can be interpolated to match exactly the instants when the model computation'
+        #                ' is performed. This option is useful if the model time-step is not a multiple of the PSCAD time-step.'
+        #                ' If selected, linear interpolation will be applied to all input signals. Integer input signals '
+        #                'are also interpolated and then converted to an integer before being sent to the model. Select '
+        #                'this option with care.')
+        #category["Configuration"].logical("Use_Interpolation", description='Use linear interpolation of inputs',
+        #                                  value='.FALSE.', help=help_interp)
+        category["Configuration"].logical("Use_Interpolation", description='Use linear interpolation of inputs',
+                                          value='.FALSE.')
 
         model_parameters = category.add("Model Parameters")
         for i in range(len(self.param_names)):
@@ -1679,10 +1675,10 @@ class Application(tk.Tk):
         if NumIntStates > 0:
             script += '\t#STORAGE INTEGER:' + str(NumIntStates) + '\n'
 
-        nb_outputs_total = sum(self.out_width)
         NumFloatStates = self.Model_Info.NumFloatStates
         NumDoubleStates = self.Model_Info.NumDoubleStates
-        storage_double = 1 + NumFloatStates + NumDoubleStates + nb_outputs_total
+        # next_t_model + NumFloatStates + NumDoubleStates + nb_outputs_total + Prev_t_pscad + nb_inputs_total
+        storage_double = 1 + NumFloatStates + NumDoubleStates + self.nb_outputs_total + 1 + self.nb_inputs_total
         script += '\t#STORAGE REAL:' + str(storage_double) + '\n'
         script += '\n'
 
@@ -1698,7 +1694,7 @@ class Application(tk.Tk):
         for name in out_init_names:
             script += '$' + name + ', '
 
-        script += '$TRelease, "$DLL_Path")'
+        script += '$TRelease, "$DLL_Path", $Use_Interpolation)'
 
         wizard.script['Fortran'] = script
 
