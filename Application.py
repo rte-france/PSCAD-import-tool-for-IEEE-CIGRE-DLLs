@@ -1252,6 +1252,7 @@ class Application(tk.Tk):
             bf += '\tEND DO\n'
 
         bf += '\t! Get output values from STORF\n'
+        bf += '\t! Retrieve previous outputs values, can be used by the model in Model_Outputs function\n'
 
         outputs_storf_to_new_struct = self.generate_conversion(self.out_names, self.out_width, self.out_fortran_types,
                                                                self.out_pscad_types, None, True,
