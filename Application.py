@@ -1177,7 +1177,7 @@ class Application(tk.Tk):
               '\t\tDELT_Model = Model_Info_fp.FixedStepBaseSampleTime\n\n' \
               '\t\t! Idea still under discussion but currently adopted: -1 for FixedStepBaseSampleTime indicates that the simulator time step is used as the model time step.\n' \
               '\t\t! -1 means inherited value\n' \
-              '\t\tIF DELT_Model .EQ. -1 THEN\n' \
+              '\t\tIF (DELT_Model .EQ. -1) THEN\n' \
               '\t\t\tDELT_Model = DELT\n' \
               '\t\tENDIF\n\n' \
               '\t\t! Error if the time step required by the controls is smaller than the simulation time step\n' \
