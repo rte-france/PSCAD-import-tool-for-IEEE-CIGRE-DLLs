@@ -1175,8 +1175,13 @@ class Application(tk.Tk):
               '\t\tcall Handle_Message(pInstance, retval)\n\n' \
               '\t\t! Extract the control code sampling step size (Seconds)\n' \
               '\t\tDELT_Model = Model_Info_fp.FixedStepBaseSampleTime\n\n' \
+              '\t\t! Idea still under discussion but currently adopted: -1 for FixedStepBaseSampleTime indicates that the simulator time step is used as the model time step.\n' \
+              '\t\t! -1 means inherited value\n' \
+              '\t\tIF DELT_Model .EQ. -1 THEN\n' \
+              '\t\t\tDELT_Model = DELT\n' \
+              '\t\tENDIF\n\n' \
               '\t\t! Error if the time step required by the controls is smaller than the simulation time step\n' \
-              '\t\tIF ( DELT_Model .LT. DELT) THEN\n' \
+              '\t\tIF (DELT_Model .LT. DELT) THEN\n' \
               '\t\t\tWRITE(IUNIT,*) "*** Error - The ",OrigModelNameShortened," controls require a time-step of ", DELT_Model\n' \
               '\t\t\tWRITE(IUNIT,*) "The current program time-step used is ", DELT\n' \
               '\t\t\tWRITE(IUNIT,*) "The controller sample time must be larger than the simulation time-step."\n' \
