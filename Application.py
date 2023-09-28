@@ -157,7 +157,8 @@ class Application(tk.Tk):
             self.generate_pscad_project()
 
         except Exception as e:
-            self.display_error(e.args[0])
+            #self.display_error(e.args[0])
+            self.display_error(repr(e))
 
     def remove_forbidden_char(self, str):
         str = str.replace(' ', '_')
