@@ -1,7 +1,11 @@
 # For GUI
 # tuto : https://python.sdv.univ-paris-diderot.fr/20_tkinter/
 import tkinter as tk
-from tkinter import filedialog
+
+#from tkinter import filedialog  # cesar
+from tkinter import filedialog, ttk  # ttk provides better rendering for label, entry etc. compared to tk
+import shutil  # to copy files
+
 import os
 
 # import IEEE_Cigre_DLLInterface
@@ -24,20 +28,42 @@ from mhi.pscad.wizard import UserDefnWizard, Signal
 # doc reference manual: https://www.pscad.com/webhelp/al-help/automation/index.html
 # import mhrc.automation
 
+
 # Application inherits from the class tk.Tk
 class Application(tk.Tk):
 
     def __init__(self, num_version):
         tk.Tk.__init__(self)
 
+        # GUI widgets: all 'self' attributes must be declared in init
+        self.button_generate_pscad_model = None
+        self.button_go_to_folder = None
+        self.button_refresh = None
+        self.refresh_image = None
+        self.go_to_folder_image = None
+        self.combobox_pscad_projects = None
+        self.button_browse_new_project = None
+        self.entry_destination_folder = None
+        self.radio_option = None
+        self.label_dll_file_path = None
+        self.button_browse_pscx_file_path = None
+        self.entry_dll_file_path = None
+        self.entry_destination_folder_placeholder = "Destination folder"  # gray info if empty
+        self.combobox_pscad_projects_placeholder = "Select an open PSCAD project"
+    
+        # Other attibutes
+        self.pscad = None
+        self.pscad_projects_selected_value = None  # for option 2 only
+        self.destination_folder = None
+        self.pscad_project_name = None  # for both option 1 and 2
         self.num_version = num_version
         self.dll_file_path = None
         self.dll_file_name = None  # the name of the file 'modelName.dll'
-        self.dll_folder_path = None
         self.fortran_interface_file_path = None
         self.fortran_interface_file_name = None
         self.row_index = 0  # for GUI grid
         self.list_label_errors = []
+        self.list_label_info = []
         self.Model_Info = None
         self.Model_Name = None
         self.Model_Name_Shortened = None
@@ -71,32 +97,223 @@ class Application(tk.Tk):
         self.nb_outputs_total = 0
         self.nb_params_total = 0
 
+    # Returns open PSCAD project names
+    def get_available_pscad_project_names(self):
+        projects_list = self.pscad.projects()
+        project_names = []
+        for project in projects_list:
+            if project['type'] == 'Case':  # The project with type "case" is a real project, not a library
+                project_names.append(project['name'])
+        return project_names  # All the available projects (the names as appear in PSCAD)
+
+    # Open the directory of the selected project in the combobox
+    # Do nothing if the project does not exist
+    def go_to_selected_project_folder(self):
+        project_name = self.pscad_projects_selected_value.get()
+
+        try:
+            pscad_project = self.pscad.project(name=project_name)
+        except Exception:
+            return
+
+        project_filename = pscad_project.filename
+        folder_path = os.path.dirname(project_filename)  # project folder
+        if os.path.exists(folder_path):
+            os.startfile(folder_path)
+
+    # Get self.pscad
+    # Raise Exception if PSCAD 5 not installed or unlicensed
+    def init_pscad(self):
+        label_loading_pscad = None
+        try:
+            if self.pscad is None:  # Means PSCAD never init
+                # Display Loading message only if self.pscad is None
+
+                self.display_info('Loading PSCAD')  # method 1
+                # method 2
+                # label_loading_pscad = tk.Label(self, text='Loading PSCAD', fg='#007934', font='Helvetica 10 bold')
+                # label_loading_pscad.grid(row=3, column=0, pady=0)  # bellow radio button
+
+                self.update_idletasks()  # force GUI refresh
+
+                self.pscad = mhi.pscad.application()  # use PSCAD instance already open or launch a new instance
+
+                # method 1
+                self.list_label_info[-1].destroy()  # remove last info from GUI
+                self.list_label_info.pop()  # remove last element from list
+                self.row_index -= 1
+
+                # label_loading_pscad.destroy()  # method 2
+            if not self.pscad.licensed():
+                raise Exception
+        except Exception as e:
+            if label_loading_pscad is not None:
+                label_loading_pscad.destroy()
+            error_message = "PSCAD V5.X is not installed on this computer or is unlicensed."
+            raise Exception(error_message)
+
+    # Fill combobox values with open PSCAD project names
+    def refresh_pscad_projects(self):
+        pscad_project_names = self.get_available_pscad_project_names()
+        self.combobox_pscad_projects["values"] = pscad_project_names
+
+    # Actions when clicking on radio button
+    def click_radio_button(self):
+        selected_option = self.radio_option.get()
+
+        if selected_option == "Option 1":
+            # disable option 2 entries
+            self.combobox_pscad_projects.config(state=tk.DISABLED)
+            self.combobox_pscad_projects.config(foreground="gray")  # text stay in black by default
+            self.button_go_to_folder.config(state=tk.DISABLED)
+            self.button_refresh.config(state=tk.DISABLED)
+            # enable option 1 entries
+            self.entry_destination_folder.config(state=tk.NORMAL)
+            self.button_browse_new_project.config(state=tk.NORMAL)
+
+        elif selected_option == "Option 2":
+            self.entry_destination_folder.config(state=tk.DISABLED)
+            self.button_browse_new_project.config(state=tk.DISABLED)
+            self.combobox_pscad_projects.config(state=tk.NORMAL)
+            self.button_go_to_folder.config(state=tk.NORMAL)
+            self.button_refresh.config(state=tk.NORMAL)
+
+            try:
+                self.init_pscad()  # Get self.pscad. Raise Exception if not installed or unlicensed
+            except Exception as e:
+                # exception to display error because does not stop algo
+                self.display_error('Cannot select an available project. ' + str(e))
+                self.radio_option.set("Option 1")
+                self.click_radio_button()
+            else:  # no error
+                self.refresh_pscad_projects()
+                # set black font only if selected value != placeholder_value
+                self.set_combobox_black_foreground(self.combobox_pscad_projects, self.pscad_projects_selected_value,
+                                                   self.combobox_pscad_projects_placeholder)
+
+    # Fill entry with the selected folder path
+    def select_folder(self, entry):  # ***-->***
+        initial_dir = entry.get()  # Get the current folder in the entry
+        folder = filedialog.askdirectory(initialdir=initial_dir)  # Address to the selected folder
+        if folder:
+            entry.delete(0, tk.END)
+            entry.insert(0, folder)
+            entry.config(foreground="black")  # because can be gray if placeholder value
+
     # Run the program and display GUI
     def start(self):
         self.create_widgets()
 
+    # Remove placeholder value when clicking on the entry
+    def remove_placeholder(self, entry, placeholder_value):
+        if entry.get() == placeholder_value:
+            entry.delete(0, tk.END)
+            entry.config(foreground="black")  # Changement de la couleur du texte
+
+    # Display placeholder value if entry is left empty
+    def display_placeholder(self, entry, placeholder_value):
+        if not entry.get():  # if entry empty
+            entry.insert(0, placeholder_value)
+            entry.config(foreground="gray")
+
+    # Display placeholder value for a combobox if no value selected
+    def display_combobox_placeholder(self, combobox, combobox_selected_value, placeholder_value):
+        if not combobox_selected_value.get():  # empty
+            combobox_selected_value.set(placeholder_value)
+            combobox.config(foreground="gray")
+
+    def set_combobox_black_foreground(self, combobox, combobox_selected_value, placeholder_value):
+        # For info, combobox_selected_value should never be empty
+        if combobox_selected_value.get() != "" and combobox_selected_value.get() != placeholder_value:
+            combobox.config(foreground="black")
+
     # Create all GUI labels, buttons, etc.
     def create_widgets(self):
 
+        pady_value = (10, 0)  # 10 top, 0 bottom
+
         # Row for PSCX file
-        self.label_dll_file_path = tk.Label(self, text="DLL File Path")
-        self.entry_dll_file_path = tk.Entry(self, width=50)
-        self.button_browse_pscx_file_path = tk.Button(self, text="Browse",
-                                                      command=lambda: self.open_file(self.entry_dll_file_path,
+        self.label_dll_file_path = ttk.Label(self, text="DLL File Path")
+        self.entry_dll_file_path = ttk.Entry(self, width=50)
+        self.button_browse_pscx_file_path = ttk.Button(self, text="Browse",
+                                                       command=lambda: self.open_file(self.entry_dll_file_path,
                                                                                      '.dll'))
 
-        self.label_dll_file_path.grid(row=self.row_index, pady=10)  # pady add spaces up and down
-        self.entry_dll_file_path.grid(row=self.row_index, column=1, pady=10)
-        self.button_browse_pscx_file_path.grid(row=self.row_index, column=2, pady=10)
+        self.label_dll_file_path.grid(row=self.row_index, pady=pady_value)  # pady add spaces up and down
+        self.entry_dll_file_path.grid(row=self.row_index, column=1, pady=pady_value)
+        self.button_browse_pscx_file_path.grid(row=self.row_index, column=2, pady=pady_value)
         self.row_index += 1
 
-        # Row for the button Generate PSCAD Model
-        self.button_generate_pscad_model = tk.Button(self, text="Generate PSCAD Model",
-                                                 command=lambda: self.generate_pscad_model())
+        # Option 1:
+        self.radio_option = tk.StringVar(
+            value="Option 1")  # variable to store the selected value. Default value is option 1
+        radio_button1 = ttk.Radiobutton(self, text="Create New Project", variable=self.radio_option,
+                                        value="Option 1",
+                                        command=self.click_radio_button)  # To switch between radio buttons
+        # sticky="w" to left align radio buttons
+        radio_button1.grid(row=self.row_index, column=0, pady=pady_value, sticky="w", padx=(10, 0))
+
+        self.entry_destination_folder = ttk.Entry(self, width=50)  # The entry to select a folder as the destination for the new project
+        self.entry_destination_folder.grid(row=self.row_index, column=1, pady=pady_value)
+        self.entry_destination_folder.bind("<FocusIn>", lambda event, entry=self.entry_destination_folder, placeholder_value=self.entry_destination_folder_placeholder: self.remove_placeholder(entry, placeholder_value))
+        self.entry_destination_folder.bind("<FocusOut>", lambda event, entry=self.entry_destination_folder, placeholder_value=self.entry_destination_folder_placeholder: self.display_placeholder(entry, placeholder_value))
+        self.display_placeholder(self.entry_destination_folder, self.entry_destination_folder_placeholder)
+
+        self.entry_destination_folder.config(state=tk.DISABLED)
+
+        self.button_browse_new_project = ttk.Button(self, text="Browse",
+                                                    command=lambda: self.select_folder(self.entry_destination_folder))
+        self.button_browse_new_project.grid(row=self.row_index, column=2, pady=pady_value)
+        self.button_browse_new_project.config(state=tk.DISABLED)
+
+        self.row_index += 1
+
+        # Option 2:
+        radio_button2 = ttk.Radiobutton(self, text="Use Available Project", variable=self.radio_option,
+                                        value="Option 2", command=self.click_radio_button)  # Switching to option 2
+        # sticky="w" to left align
+        radio_button2.grid(row=self.row_index, column=0, pady=pady_value, sticky="w", padx=(10, 0))
+
+        self.pscad_projects_selected_value = tk.StringVar()  # Variable to store selected value
+        self.combobox_pscad_projects = ttk.Combobox(self, width=47,
+                                                    textvariable=self.pscad_projects_selected_value)
+        self.combobox_pscad_projects.grid(row=self.row_index, column=1, pady=pady_value)
+        self.combobox_pscad_projects.config(state=tk.DISABLED)
+        self.pscad_projects_selected_value.set("")  # to define a default selected value
+        self.display_combobox_placeholder(self.combobox_pscad_projects, self.pscad_projects_selected_value,
+                                          self.combobox_pscad_projects_placeholder)
+        self.combobox_pscad_projects.bind("<FocusIn>", lambda event,
+                                                              combobox=self.combobox_pscad_projects,
+                                                              combobox_selected_value=self.pscad_projects_selected_value,
+                                                              placeholder_value=self.combobox_pscad_projects_placeholder: self.set_combobox_black_foreground(combobox, combobox_selected_value, placeholder_value))
+
+        # 24x24px
+        icon_base64_refresh = 'iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAcZJREFUSEvN1cvLTWEUBvDfFyKKhEQGbgPkkhiIAUoiURgwUkwkBiYG/AMykJSJxEARMsBAQkoxUC4pykTkVi4xYKLcWrU+bdnv3ufkfOUd7X3Oep9n3Z5n9xng0zfA+P4LgpXYgVmYiJ94hQc4jSv4XupEUwXTcBYLWtp4F2vwri6uRLAC5zEqLx7FRTxNkNlYha1Z1WvEnSc4h5mYE7F1BJPxGMNxFRvxpVBFJHAS6/ABe3Esn8eVCG5jMS5jLX40tOggXmAzFlXiDmN3HcFQvMdnzMtMSviR4dtCF6I9j0oVzMBXPOtAI5H1LmzC4Iy/h4X9d3ulg7HYloPfj2u9JigW26sKOiZYgn24iRMtQ+5gRH/r4CHm5s1vuIADCLW2nRGY0r89dTOYj/s1KKGDGOKnBobxmcQExKr/9qbqDI5gZwXkFk4hPGlPA3isZyh+ebZ2WTW2SvARo9M5D2FY+lH4TckqRuISlmZMOO7LEsGNVHGIZkOa1qC0guO4nh4Vv03FemzHmGxfvMdy/HGa1jRs+gymt0z3TnrR87q4Nh0MwWpsyQ/OpPSeN1lNzC0q71gHbavY9f9tFXQN2M0M/hk8AH4BquBSGZPuD3sAAAAASUVORK5CYII='
+        # 24x24px
+        icon_base64_go_to_folder = 'iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAQAAABKfvVzAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAACYktHRAD/h4/MvwAAAAd0SU1FB+cKEQwjJO4wwxUAAAGHSURBVDjLjdM/a1NhFAbw331zo21KapqotBa7qHTRD2Bx1G/gn0XQzcFFUBA/gNTNRUGcOinYQVz8g4NUXARBXCwOVYMYTNralkZJNfE69BprxXifM72H8zzv4Tnn0Atjph2UGUVTEjPGspXnTepIJO4o/U7HoGRCX5p576UEZ5wTwDE1F61tVDvinUceeuCFe3I4bkXSjY5LcuulORxyVsMJt90y56RBVXvNatsDXrlp2VanJKpw3VNH079GXDZpGFxI9afAAU9cI1bQZ9p9Q4JI21VBzqgfKqlIybhIy4xRhchj45oW5IRuRIJIWVki8tWySFDQMht564o3qVvJJmv/fHfsdz624LVnGUfZrxas2pl59rs1gkU7MhN2+Rg0bM9MGFEN6l37/oe8ig9BXVmUiTCguN5S0ZZMhG3y6sG8QndTe6OibSn4LDaQiTBsVTNYkRjMaOqitaDp+8aL6kn4RNDyxVDGlmrEvpk3Ye7XRf0DiYJ97hLhsBv6/9rUzYg9d9rSTyFpa7yLVQGQAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDIzLTEwLTE3VDEyOjM1OjI1KzAwOjAwuFkSYAAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyMy0xMC0xN1QxMjozNToyNSswMDowMMkEqtwAAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjMtMTAtMTdUMTI6MzU6MzYrMDA6MDBjU5EAAAAAAElFTkSuQmCC'
+        self.go_to_folder_image = tk.PhotoImage(data=icon_base64_go_to_folder)
+        self.refresh_image = tk.PhotoImage(data=icon_base64_refresh)
+
+        self.button_refresh = ttk.Button(self, image=self.refresh_image, command=lambda: self.refresh_pscad_projects())
+
+        self.button_go_to_folder = ttk.Button(self, image=self.go_to_folder_image,
+                                              command=lambda: self.go_to_selected_project_folder())
+        self.button_refresh.grid(row=self.row_index, column=2, pady=pady_value, padx=(0, 40))
+        self.button_go_to_folder.grid(row=self.row_index, column=2, pady=pady_value, padx=(40, 0))
+        self.button_refresh.config(state=tk.DISABLED)
+        self.button_go_to_folder.config(state=tk.DISABLED)
+
+        self.row_index += 1
+
+        self.button_generate_pscad_model = ttk.Button(self, text="Generate PSCAD Model",
+                                                      command=lambda: self.generate_pscad_model())
         self.button_generate_pscad_model.grid(row=self.row_index, column=1, pady=10)
+
         self.row_index += 1
 
-        self.grid_columnconfigure(0, minsize=200)  # min width for labels (column 0)
+        self.click_radio_button()  # to change states of entries
+
+        self.grid_columnconfigure(0, minsize=160)  # min width for labels (column 0)
         self.grid_columnconfigure(2, minsize=100)  # min width for Browse (column 2)
 
         # FOR DEBUG
@@ -105,7 +322,17 @@ class Application(tk.Tk):
         #self.button_generate_pscad_model.invoke()  # Appuyer sur le bouton
         # self.generate_pscad_model()
 
-    def clean_attributes(self):
+    # remove displayed errors
+    def clean_errors_and_info(self):
+        for label_error in self.list_label_errors:
+            label_error.destroy()
+            self.row_index -= 1
+        for label_info in self.list_label_info:
+            label_info.destroy()
+            self.row_index -= 1
+
+    # Reset list attributes
+    def clean_list_attributes(self):
         self.in_names = []
         self.in_fortran_types = []
         self.in_pscad_types = []
@@ -128,37 +355,50 @@ class Application(tk.Tk):
         self.param_max_values = []
 
         self.list_label_errors = []
+        self.list_label_info = []
 
+    # Main function, called when clicking on the generate button
     def generate_pscad_model(self):
-        self.clean_attributes()
 
-        self.dll_file_path = self.entry_dll_file_path.get()
-        self.dll_file_name = os.path.basename(self.dll_file_path)
-        self.dll_folder_path = os.path.dirname(self.dll_file_path)  # get folder path of a file
         try:
-            dll_handle = ctypes.cdll.LoadLibrary(self.dll_file_path)
-            dll_handle.Model_GetInfo.restype = ctypes.POINTER(IEEE_Cigre_DLLInterface_Model_Info)
-            result = dll_handle.Model_GetInfo()  #  pointer to struct "IEEE_Cigre_DLLInterface_Model_Info"
-            self.Model_Info = result.contents  # use contents to get access
-            self.get_dll_interface_version()
-            self.check_dll_interface_version()
+            self.clean_errors_and_info()  # Remove displayed errors
+
+            self.clean_list_attributes()  # Reset lists
+
+            self.get_and_check_dll_file_path()  # fill dll_file_path
+
+            self.get_dll_model_info()  # get self.Model_Info
+
+            self.get_and_check_dll_interface_version()
+
             self.Model_Name = self.Model_Info.ModelName.decode("utf-8")
             self.Model_Name_Shortened = self.Model_Name[:50]  # take max 50 char
+
+            self.get_and_check_pscad_project_name()  # get self.pscad_project_name
+
+            self.get_destination_folder()  # Get self.destination_folder
+
             self.fortran_interface_file_name = self.Model_Name_Shortened + '_FINTERFACE_PSCAD.f90'
-            self.fortran_interface_file_path = self.dll_folder_path + '\\' + self.fortran_interface_file_name
+            self.fortran_interface_file_path = self.destination_folder + '\\' + self.fortran_interface_file_name
 
+            # Create wrapper code and write it to the Fortran file
             self.fill_in_out_param_lists()
-
             buffer = self.create_fortran_code()
-
             with open(self.fortran_interface_file_path, 'w') as f:
                 f.write(buffer)  # allow rewrite on existing file
 
+            # Copy the DLL into the destination folder
+            destination_dll_path = self.destination_folder + '\\' + self.dll_file_name
+            if not os.path.exists(destination_dll_path):
+                shutil.copy(self.dll_file_path, destination_dll_path)
+
+            # Generate PSCAD projet and component
             self.generate_pscad_project()
 
         except Exception as e:
-            #self.display_error(e.args[0])
-            self.display_error(repr(e))
+            #self.display_error(e.args[0])  # for old version of python
+            #self.display_error(repr(e))  # contains Exception in the message...
+            self.display_error(str(e))
 
     def remove_forbidden_char(self, str):
         str = str.replace(' ', '_')
@@ -297,7 +537,11 @@ class Application(tk.Tk):
         elif datatype == IEEE_Cigre_DLLInterface_DataType_Enum.IEEE_Cigre_DLLInterface_DataType_real64_T:
             return parameter_union.Real64_Val
         elif datatype == IEEE_Cigre_DLLInterface_DataType_Enum.IEEE_Cigre_DLLInterface_DataType_c_string_T:
-            return parameter_union.Char_Ptr
+            try:
+                return parameter_union.Char_Ptr.decode("utf-8")  # ok for DefaultValueU
+            except Exception:
+                # MinMaxValueU has no const char_T * const    Char_Ptr;
+                return parameter_union.Char_Val
         else:
             raise Exception('get_parameter_default_min_or_max_value : error in dataType_enum: ' + str(datatype))
 
@@ -638,190 +882,64 @@ class Application(tk.Tk):
 
         return buffer
 
+    # types considered are :
+    # 'INTEGER*2' 'INTEGER' 'INTEGER*4' 'REAL' 'REAL*4' 'REAL*8' 'DOUBLE PRECISION'
+    # 'CHARACTER' 'CHARACTER(*)' 'CHARACTER (LEN=...)'
+    def get_conversion(self, type_from, type_to):
+        conversion_part_1 = None
+        conversion_part_2 = None
+        if type_from == 'INTEGER*2':
+            if (type_to == 'INTEGER*2' or type_to == 'INTEGER' or type_to == 'INTEGER*4' or type_to == 'REAL' or
+                    type_to == 'REAL*4' or type_to == 'REAL*8' or type_to == 'DOUBLE PRECISION'):
+                conversion_part_1 = ''
+                conversion_part_2 = ''
+            elif 'CHARACTER' in type_to:  # 'CHARACTER' or 'CHARACTER(*)' or 'CHARACTER (LEN=1000)' for ex
+                conversion_part_1 = 'CHAR('
+                conversion_part_2 = ')'
+        elif type_from == 'INTEGER' or type_from == 'INTEGER*4':
+            if type_to == 'INTEGER*2':
+                conversion_part_1 = 'INT('
+                conversion_part_2 = ', 2)'
+            elif (type_to == 'INTEGER' or type_to == 'INTEGER*4' or type_to == 'REAL' or
+                    type_to == 'REAL*4' or type_to == 'REAL*8' or type_to == 'DOUBLE PRECISION'):
+                conversion_part_1 = ''
+                conversion_part_2 = ''
+            elif 'CHARACTER' in type_to:  # 'CHARACTER' or 'CHARACTER(*)' or 'CHARACTER (LEN=1000)' for ex
+                conversion_part_1 = 'CHAR('
+                conversion_part_2 = ')'
+        elif type_from == 'REAL' or type_from == 'REAL*4' or type_from == 'REAL*8' or type_from == 'DOUBLE PRECISION':
+            if type_to == 'INTEGER*2':
+                conversion_part_1 = 'INT('
+                conversion_part_2 = ', 2)'
+            elif type_to == 'INTEGER' or type_to == 'INTEGER*4':
+                conversion_part_1 = 'INT('
+                conversion_part_2 = ')'
+            elif type_to == 'REAL' or type_to == 'REAL*4' or type_to == 'REAL*8' or type_to == 'DOUBLE PRECISION':
+                conversion_part_1 = ''
+                conversion_part_2 = ''
+            elif 'CHARACTER' in type_to:  # 'CHARACTER' or 'CHARACTER(*)' or 'CHARACTER (LEN=1000)' for ex
+                conversion_part_1 = 'CHAR(INT('
+                conversion_part_2 = '))'
+        elif type_from == 'CHARACTER':
+            if (type_to == 'INTEGER*2' or type_to == 'INTEGER' or type_to == 'INTEGER*4' or type_to == 'REAL' or
+                    type_to == 'REAL*4' or type_to == 'REAL*8' or type_to == 'DOUBLE PRECISION'):
+                conversion_part_1 = 'ICHAR('
+                conversion_part_2 = ')'
+            elif 'CHARACTER' in type_to:  # 'CHARACTER' or 'CHARACTER(*)' or 'CHARACTER (LEN=1000)' for ex
+                conversion_part_1 = ''
+                conversion_part_2 = ''
+        elif 'CHARACTER(' in type_from:  # 'CHARACTER(*)' or 'CHARACTER (LEN=1000)' for ex
+            if 'CHARACTER' in type_to:
+                # OK, character(len=100) to character(len=2) or to character works
+                conversion_part_1 = ''
+                conversion_part_2 = ''
 
-    """# names is self.in_names or self.param_names or self.out_names
-    # same for widths, fortran_types and pscad_types
-    # use_storf is boolean to use STORF or _pscad variables
-    # fill_new_struct is boolean :
-    # * True to fill INPUTS_new, OUTPUTS_new or PARAMETERS_new (INPUTS_new etc. on the left side)
-    # * False to get values from them (INPUTS_new etc. on the right side)
-    # new_struct is "INPUTS_new", "OUTPUTS_new" or "PARAMETERS_new"
-    def generate_conversion(self, names, widths, fortran_types, pscad_types, use_storf, fill_new_struct, new_struct):
-        buffer = ''
-        # width_sum = sum(widths)
-        i_storf = 0
-        for i in range(0, len(names)):
-            if widths is not None:
-                width = widths[i]
-            else:
-                width = 1
-            name = names[i]
-            pscad_type = pscad_types[i]
-            fortran_type = fortran_types[i]
+        if conversion_part_1 is None or conversion_part_2 is None:
+            raise Exception('get_conversion problem with type_from: ' + type_from + ' and type_to: ' + type_to)
 
-            part_1_base = new_struct + '%' + name  # ex: INPUTS_new%in_1
+        return conversion_part_1, conversion_part_2
 
-            for j in range(1, width + 1):  # work also if width == 1
-                if width == 1:
-                    part_1 = part_1_base
-                else:
-                    part_1 = part_1_base + '(' + str(j) + ')'
-
-                if use_storf:
-                    if self.Model_Info.NumDoubleStates > 0:
-                        part_2 = 'STORF(NSTORF + 2 + ' + str(i_storf) + ')'
-                    else:
-                        part_2 = 'STORF(NSTORF + 1 + ' + str(i_storf) + ')'
-                    i_storf += 1
-
-                    if fill_new_struct:  # STORF on the right side
-                        type_from = 'DOUBLE PRECISION'  # REAL*8
-                        type_to = fortran_type
-                    else:
-                        type_from = fortran_type
-                        type_to = 'DOUBLE PRECISION'
-                else:
-                    part_2 = name + '_pscad'
-                    if width > 1:
-                        part_2 += '(' + str(j) + ')'
-
-                    if fill_new_struct:
-                        type_from = pscad_type
-                        type_to = fortran_type
-                    else:
-                        type_from = fortran_type
-                        type_to = pscad_type
-
-                conversion_part_1, conversion_part_2 = self.get_conversion(type_from, type_to)
-
-                if fill_new_struct:
-                    buffer += '\t' + part_1 + ' = ' + conversion_part_1 + part_2 + conversion_part_2
-                else:
-                    buffer += '\t' + part_2 + ' = ' + conversion_part_1 + part_1 + conversion_part_2
-
-                buffer += '\n'
-
-        return buffer"""
-
-    """def generate_conversion(self, names, widths, fortran_types, pscad_types, use_storf, fill_new_struct, new_struct):
-        buffer = ''
-        # width_sum = sum(widths)
-        i_storf = 0
-        for i in range(0, len(names)):
-            if widths is not None:
-                width = widths[i]
-            else:
-                width = 1
-            name = names[i]
-            pscad_type = pscad_types[i]
-            fortran_type = fortran_types[i]
-
-            part_1_base = new_struct + '%' + name  # ex: INPUTS_new%in_1
-
-            if width == 1:
-                part_1 = part_1_base
-                if use_storf:
-                    if self.Model_Info.NumDoubleStates > 0:
-                        part_2 = 'STORF(NSTORF + 2 + ' + str(i_storf) + ')'
-                    else:
-                        part_2 = 'STORF(NSTORF + 1 + ' + str(i_storf) + ')'
-                    i_storf += 1
-
-                    if fill_new_struct:  # STORF on the right side
-                        type_from = 'DOUBLE PRECISION'  # REAL*8
-                        type_to = fortran_type
-                    else:
-                        type_from = fortran_type
-                        type_to = 'DOUBLE PRECISION'
-                else:
-                    part_2 = name + '_pscad'
-                    if fill_new_struct:
-                        type_from = pscad_type
-                        type_to = fortran_type
-                    else:
-                        type_from = fortran_type
-                        type_to = pscad_type
-
-                conversion_part_1, conversion_part_2 = self.get_conversion(type_from, type_to)
-
-                if fill_new_struct:
-                    buffer += '\t' + part_1 + ' = ' + conversion_part_1 + part_2 + conversion_part_2
-                else:
-                    buffer += '\t' + part_2 + ' = ' + conversion_part_1 + part_1 + conversion_part_2
-
-                buffer += '\n'
-
-            else:  # width > 1
-                for j in range(1, width + 1):
-                    part_1 = part_1_base + '(' + str(j) + ')'
-                    if use_storf:
-                        if self.Model_Info.NumDoubleStates > 0:
-                            part_2 = 'STORF(NSTORF + 2 + ' + str(i_storf) + ')'
-                        else:
-                            part_2 = 'STORF(NSTORF + 1 + ' + str(i_storf) + ')'
-                        i_storf += 1
-
-                        if fill_new_struct:  # STORF on the right side
-                            type_from = 'DOUBLE PRECISION'  # REAL*8
-                            type_to = fortran_type
-                        else:
-                            type_from = fortran_type
-                            type_to = 'DOUBLE PRECISION'
-                    else:
-                        part_2 = name + '_pscad' + '(' + str(j) + ')'
-                        if fill_new_struct:
-                            type_from = pscad_type
-                            type_to = fortran_type
-                        else:
-                            type_from = fortran_type
-                            type_to = pscad_type
-
-                    conversion_part_1, conversion_part_2 = self.get_conversion(type_from, type_to)
-
-                    if fill_new_struct:
-                        buffer += '\t' + part_1 + ' = ' + conversion_part_1 + part_2 + conversion_part_2
-                    else:
-                        buffer += '\t' + part_2 + ' = ' + conversion_part_1 + part_1 + conversion_part_2
-
-                    buffer += '\n'
-
-        return buffer"""
-
-    """def generate_conversion(self, names, fortran_types, pscad_types, use_storf, fill_new_struct, new_struct):
-
-        for i in range(0, len(names)):
-            part_1 = new_struct + '%' + names[i]
-            if use_storf:
-                if self.Model_Info.NumDoubleStates > 0:
-                    part_2 = 'STORF(NSTORF + 2 + ' + str(i) + ')'
-                else:
-                    part_2 = 'STORF(NSTORF + 1 + ' + str(i) + ')'
-            else:
-                part_2 = names[i] + '_pscad'
-
-            if use_storf:
-                if fill_new_struct:  # STORF on the right side
-                    type_from = 'DOUBLE PRECISION'  # REAL*8
-                    type_to = fortran_types[i]
-                else:
-                    type_from = fortran_types[i]
-                    type_to = 'DOUBLE PRECISION'
-            else:
-                if fill_new_struct:
-                    type_from = pscad_types[i]
-                    type_to = fortran_types[i]
-                else:
-                    type_from = fortran_types[i]
-                    type_to = pscad_types[i]
-
-            conversion_part_1, conversion_part_2 = self.get_conversion(type_from, type_to)
-
-            if fill_new_struct:
-                return part_1 + ' = ' + conversion_part_1 + part_2 + conversion_part_2
-            else:
-                return part_2 + ' = ' + conversion_part_1 + part_1 + conversion_part_2"""
-
-    # Only conversions that can appear in the wrapper
+    """# Only conversions that can appear in the wrapper
     def get_conversion(self, type_from, type_to):
         conversion_part_1 = None
         conversion_part_2 = None
@@ -872,11 +990,15 @@ class Application(tk.Tk):
             if type_to == 'DOUBLE PRECISION' or type_to == 'REAL*8' or type_to == 'REAL':
                 conversion_part_1 = ''
                 conversion_part_2 = ' ! REAL*4 to DOUBLE PRECISION (REAL*8)'
+        elif type_from == 'CHARACTER(*)':
+            if type_to == 'DOUBLE PRECISION' or type_to == 'REAL*8' or type_to == 'REAL':
+                conversion_part_1 = ''
+                conversion_part_2 = ' ! REAL*4 to DOUBLE PRECISION (REAL*8)'
 
         if conversion_part_1 is None or conversion_part_2 is None:
             raise Exception('get_conversion problem with type_from: ' + type_from + ' and type_to: ' + type_to)
 
-        return conversion_part_1, conversion_part_2
+        return conversion_part_1, conversion_part_2"""
 
     # We could also convert a text file to a base64 encoded string and then save the base64 encoded string
     # as a Python module
@@ -1478,27 +1600,80 @@ class Application(tk.Tk):
         else:
             raise Exception('ieee_cigre_datatype_to_pscad_param_type_str : error in dataType_enum: ' + str(datatype))
 
-    def get_dll_interface_version(self):
-        self.DLLInterfaceVersion = [int(x) for x in self.Model_Info.DLLInterfaceVersion]  # ex: [1, 1, 0, 0]
+    # Get and check self.dll_file_name and self.dll_file_path
+    def get_and_check_dll_file_path(self):
+        # Check DLL file path not empty
+        self.dll_file_path = self.entry_dll_file_path.get()
+        self.dll_file_name = os.path.basename(self.dll_file_path)
+        if not self.dll_file_path:
+            raise Exception("Please select a DLL")
+
+    # Get self.Model_Info
+    def get_dll_model_info(self):
+        # Get and check DLL info
+        dll_handle = ctypes.cdll.LoadLibrary(self.dll_file_path)
+        dll_handle.Model_GetInfo.restype = ctypes.POINTER(IEEE_Cigre_DLLInterface_Model_Info)
+        result = dll_handle.Model_GetInfo()  # pointer to struct "IEEE_Cigre_DLLInterface_Model_Info"
+        self.Model_Info = result.contents  # use contents to get access
 
     # Check if this import tool is compatible with the version of the IEEE CIGRE DLL Interface
     # For now, it is only compatible with 1.1.0.0
-    def check_dll_interface_version(self):
+    def get_and_check_dll_interface_version(self):
+        self.DLLInterfaceVersion = [int(x) for x in self.Model_Info.DLLInterfaceVersion]  # ex: [1, 1, 0, 0]
         if self.DLLInterfaceVersion != [1, 1, 0, 0]:
             DLLInterfaceVersionStr = '.'.join(map(str, self.DLLInterfaceVersion))
             raise Exception('DLLInterfaceVersion is not correct. This import tool is compatible with 1.1.0.0 but the'
                             ' DLL interface version is ' + DLLInterfaceVersionStr)
 
-    def display_error(self, error):
+    # Get self.pscad_project_name
+    def get_and_check_pscad_project_name(self):
+        # get destination_folder
+        selected_option = self.radio_option.get()
+        if selected_option == "Option 1":
+            self.pscad_project_name = self.Model_Name_Shortened
+        else:
+            self.pscad_project_name = self.pscad_projects_selected_value.get()
+            if not self.pscad_project_name or self.pscad_project_name == self.combobox_pscad_projects_placeholder:  # means = ""
+                raise Exception("No PSCAD project selected")
 
-        if error is None or error == '':
+    # Get self.destination_folder
+    def get_destination_folder(self):
+        # get destination_folder
+        selected_option = self.radio_option.get()
+        if selected_option == "Option 1":
+            self.destination_folder = self.entry_destination_folder.get()
+            # if entry is empty or equal to the placeholder value
+            if not self.destination_folder or self.destination_folder == self.entry_destination_folder_placeholder:
+                self.destination_folder = os.path.dirname(self.dll_file_path)  # get folder path of the DLL
+        else:
+            self.init_pscad()  # reload PSCAD if it has been closed. Cannot fail because already tested in click radio button
+            project_filename = self.pscad.project(name=self.pscad_project_name).filename
+            self.destination_folder = os.path.dirname(project_filename)  # project folder
+
+    def display_error(self, message):
+
+        if message is None or message == '':
             return
 
-        error = 'Error : ' + error
+        message = 'Error : ' + message
 
-        label_error = tk.Label(self, text=error, fg='#D63C27', font='Helvetica 10 bold')
-        label_error.grid(row=self.row_index, column=1, pady=5)
-        self.list_label_errors.append(label_error)
+        #label_message = tk.Label(self, text=message, fg='#D63C27', font='Helvetica 10 bold')
+        label_message = ttk.Label(self, text=message, foreground='#D63C27', font='Helvetica 10 bold')
+        label_message.grid(row=self.row_index, column=1, pady=5)
+        self.list_label_errors.append(label_message)
+        self.row_index += 1
+
+    def display_info(self, message):
+
+        if message is None or message == '':
+            return
+
+        #message = 'Info : ' + error
+
+        #label_message = tk.Label(self, text=message, fg='#007934', font='Helvetica 10 bold')
+        label_message = ttk.Label(self, text=message, foreground='#007934', font='Helvetica 10 bold')
+        label_message.grid(row=self.row_index, column=1, pady=5)
+        self.list_label_info.append(label_message)
         self.row_index += 1
 
     # Display dialog and ask for a PSCX file
@@ -1521,14 +1696,21 @@ class Application(tk.Tk):
         # PSCAD V5
         # versions = mhi.pscad.versions()  # get installed versions
         # pscad = mhi.pscad.launch(version='4.6.3', x64=True)  # does not work, even with 4.6.2 or 4.6.1
-        try:
-            pscad = mhi.pscad.application()  # use PSCAD instance already open or launch a new instance
-        except Exception as e:
-            raise Exception(e.args[0] + ". PSCAD V5.X is not installed on this computer or is unlicensed."
-                                        " Only the wrapper file is generated")
 
-        workspace = pscad.workspace()  # Get workspace
-        project = workspace.create_project(1, self.Model_Name_Shortened, self.dll_folder_path)
+        try:
+            self.init_pscad()  # depending on the radio option, PSCAD may not be initialized
+        except Exception as e:
+            # exception to display error because does not stop algo
+            self.display_error(str(e) + ' Only the wrapper file is generated.')
+            return
+
+        workspace = self.pscad.workspace()  # Get workspace. For info, works also if no license
+        selected_option = self.radio_option.get()
+        if selected_option == "Option 1":  # create the project
+            project = workspace.create_project(1, self.pscad_project_name, self.destination_folder)  # Fail if no license
+        else:
+            project = self.pscad.project(self.pscad_project_name)  # select the project
+
         canvas = project.canvas("Main")
 
         # Init Component Wizard
@@ -1719,10 +1901,23 @@ class Application(tk.Tk):
         # link or display files. It provides a single entry point for adding, deleting and managing all external,
         # dependent files.
 
-        # Add a resource in the project tree
-        project.create_resource(self.fortran_interface_file_name)
+        resource_already_added = False
+        for resource in project.resources():
+            if resource.name == self.fortran_interface_file_name:
+                resource_already_added = True
+                break
+        if not resource_already_added:
+            # Add a resource in the project tree
+            project.create_resource(self.fortran_interface_file_name)
 
-        #canvas.add_component(defn, 20, 2)  # will be on top of the canvas
+        self.display_info('The ' + self.Model_Name_Shortened + ' component has been created in project ' +
+                          self.pscad_project_name + ' located in\n' + self.destination_folder)
+
+        # Save the project because No dialog box if PSCAD is closed and project not saved...
+        project.save()
+
+
+
 
 
 
