@@ -1509,6 +1509,11 @@ class Application(tk.Tk):
               '\t\tN_CALL_LAST_STEP= N_CALL_LAST_STEP + 1\n' \
               '\t\tIF (N_CALL_LAST_STEP .EQ. N_INSTANCE) THEN\n' \
               '\t\t\tretValFreeLib = FreeLibrary(dllHandle) ! Free DLL\n' \
+              '\t\t\t! Reset some global variables for multiple runs\n' \
+              '\t\t\tdllHandle = 0\n' \
+              '\t\t\tFIRST_CALL_THIS_FILE = .TRUE.\n' \
+              '\t\t\tN_INSTANCE = 0\n' \
+              '\t\t\tN_CALL_LAST_STEP = 0 \n' \
               '\t\tENDIF\n' \
               '\tENDIF\n\n' \
               '\t! Increment STORx pointers (this must be done every time step)\n' \
