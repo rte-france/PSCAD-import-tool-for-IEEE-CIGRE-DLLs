@@ -1766,8 +1766,9 @@ class Application(tk.Tk):
         #                'this option with care.')
         #category["Configuration"].logical("Use_Interpolation", description='Use linear interpolation of inputs',
         #                                  value='.FALSE.', help=help_interp)
-        category["Configuration"].logical("Use_Interpolation", description='Use linear interpolation of inputs',
+        p = category["Configuration"].logical("Use_Interpolation", description='Use linear interpolation of inputs',
                                           value='.FALSE.')
+        p._set_attr('.', 'content_type', 'Constant', str)
 
         model_parameters = category.add("Model Parameters")
         for i in range(len(self.param_names)):
@@ -1776,6 +1777,7 @@ class Application(tk.Tk):
             param_group_name = self.param_group_names[i]
             param_description = param_name + ' - ' + self.param_descriptions[i]
             param_unit = self.param_units[i]
+            param_fixedValue = self.param_fixedValue[i]
             #param_default_value = self.param_default_values[i]
             if param_unit != '':
                 param_default_value = str(self.param_default_values[i]) + ' [' + param_unit + ']'
@@ -1785,12 +1787,23 @@ class Application(tk.Tk):
             param_max_value = self.param_max_values[i]
             if param_pscad_type == 'INTEGER':
                 # No units for integer...
-                model_parameters.integer(param_name, description=param_description, value=param_default_value,
+                p = model_parameters.integer(param_name, description=param_description, value=param_default_value,
                                          minimum=param_min_value, maximum=param_max_value, group=param_group_name)
+                # See https://www.pscad.com/webhelp-v502-ol/PSCAD/Component_Design/Parameters_Section/Parameter_Form/Input_Field.htm
+                # for 'Literal', 'Constant' or 'Variable' contents
+                if param_fixedValue == 0:
+                    p._set_attr('.', 'content_type', 'Variable', str)  # 'Literal', 'Constant' or 'Variable'
+                else:
+                    p._set_attr('.', 'content_type', 'Constant', str)
+
             elif param_pscad_type == 'REAL':
-                model_parameters.real(param_name, description=param_description, value=param_default_value,
+                p = model_parameters.real(param_name, description=param_description, value=param_default_value,
                                       minimum=param_min_value, maximum=param_max_value, units=param_unit,
                                       group=param_group_name)
+                if param_fixedValue == 0:
+                    p._set_attr('.', 'content_type', 'Variable', str)  # 'Literal', 'Constant' or 'Variable'
+                else:
+                    p._set_attr('.', 'content_type', 'Constant', str)
             elif param_pscad_type == 'CHARACTER(*)':
                 model_parameters.text(param_name, description=param_description, value=param_default_value,
                                       group=param_group_name)
@@ -1798,8 +1811,9 @@ class Application(tk.Tk):
                 raise Exception('Unknown PSCAD type for parameter: ' + param_name)
 
         initial_conditions = category.add('Initial Conditions')
-        initial_conditions.real("TRelease", description='TRelease - Time to release initial conditions (sec)',
-                                value='0 [sec]', minimum=0, maximum=1E+308, units='sec')
+        p = initial_conditions.real("TRelease", description='TRelease - Time to release initial conditions (sec)',
+                                    value='0 [sec]', minimum=0, maximum=1E+308, units='sec')
+        p._set_attr('.', 'content_type', 'Constant', str)
 
         for i in range(len(self.out_names)):
             out_name = self.out_names[i]
@@ -1816,11 +1830,12 @@ class Application(tk.Tk):
                 p_value = 0
 
             if out_pscad_type == 'INTEGER':
-                initial_conditions.integer(p_name, description=p_description, value=p_value)
+                p = initial_conditions.integer(p_name, description=p_description, value=p_value)
             elif out_pscad_type == 'REAL':
-                initial_conditions.real(p_name, description=p_description, value=p_value)
+                p = initial_conditions.real(p_name, description=p_description, value=p_value)
             else:
                 raise Exception('Unknown PSCAD type for output: ' + out_name)
+            p._set_attr('.', 'content_type', 'Constant', str)
 
         # is not read only
         wizard.form_width = 600
