@@ -1240,6 +1240,7 @@ class Application(tk.Tk):
               '\tINTEGER   :: retValFreeLib     ! Only for FreeLibrary\n' \
               '\tTYPE(IEEE_Cigre_DLLInterface_Instance) :: pInstance\n' \
               '\tDOUBLE PRECISION :: Next_t_model ! To know when to call model output function\n' \
+              '\tLOGICAL   :: First_Step_Model ! To know the first time model sampling time has been reached\n' \
               '\tTYPE(c_ptr)                                           :: Model_Info_cp ! The C pointer of Model_GetInfo\n' \
               '\tTYPE(IEEE_Cigre_DLLInterface_Model_Info), POINTER     :: Model_Info_fp ! The F pointer of Model_GetInfo\n' \
               '\tTYPE(ModelInputs), TARGET     :: INPUTS_new\n' \
@@ -1273,7 +1274,7 @@ class Application(tk.Tk):
               '\tINTEGER :: idx_start_outputs  ! STORF start index to store outputs\n' \
               '\tINTEGER :: idx_start_prev_t  ! STORF start index to store Prev_t_pscad\n' \
               '\tINTEGER :: idx_start_inputs  ! STORF start index to store inputs\n' \
-              '\tINTEGER :: idx_start_next_model  ! STORF start index for the next model\n\n' \
+              '\tINTEGER :: idx_start_next_model_storf  ! STORF start index for the next model\n\n' \
               '\t! --------------------------------\n' \
               '\t! First, load the DLL and its functions and check static information. Do this only once\n' \
               '\t! --------------------------------\n' \
@@ -1331,7 +1332,13 @@ class Application(tk.Tk):
               '\tidx_start_outputs = idx_start_stated + ' + str(self.Model_Info.NumDoubleStates) + '\n' \
               '\tidx_start_prev_t = idx_start_outputs + ' + str(self.nb_outputs_total) + '\n' \
               '\tidx_start_inputs = idx_start_prev_t + 1\n' \
-              '\tidx_start_next_model = idx_start_inputs + ' + str(self.nb_inputs_total) + '\n\n' \
+              '\tidx_start_next_model_storf = idx_start_inputs + ' + str(self.nb_inputs_total) + '\n\n' \
+              '\t! --------------------------------\n' \
+              '\t! Initialize STORI start indexes\n' \
+              '\t! --------------------------------\n' \
+              '\tidx_start_first_step_model = NSTORI\n' \
+              '\tidx_start_statei = NSTORI + 1\n' \
+              '\tidx_start_next_model_stori = idx_start_statei + ' + str(self.Model_Info.NumIntStates) + '\n\n' \
               '\t! --------------------------------\n' \
               '\t! Set pointers\n' \
               '\t! --------------------------------\n' \
@@ -1350,6 +1357,12 @@ class Application(tk.Tk):
 
         bf += '\n' \
               '\t! --------------------------------\n' \
+              '\t! Get saved values from STORI\n' \
+              '\t! --------------------------------\n' \
+              '\tFirst_Step_Model = (STORI(idx_start_first_step_model) /= 0)  ! TRUE if not equal to 0\n'
+
+        bf += '\n' \
+              '\t! --------------------------------\n' \
               '\t! Get saved values from STORF\n' \
               '\t! --------------------------------\n' \
               '\t! Get Next_t_model from STORF\n' \
@@ -1361,7 +1374,7 @@ class Application(tk.Tk):
 
         if self.Model_Info.NumIntStates > 0:
             bf += '\tDO i = 1, ' + str(self.Model_Info.NumIntStates) + '\n'
-            bf += '\t\tSTATEI(i) = STORI(NSTORI + i - 1)\n'
+            bf += '\t\tSTATEI(i) = STORI(idx_start_statei + i - 1)\n'
             bf += '\tEND DO\n'
         if self.Model_Info.NumFloatStates > 0:
             bf += '\tDO i = 1, ' + str(self.Model_Info.NumFloatStates) + '\n'
@@ -1394,16 +1407,12 @@ class Application(tk.Tk):
 
         bf += params_pscad_to_new_struct + '\n'
 
-        bf += '\t! FIRSTSTEP is True for first step starting from the Data file or Snapshot file.\n' \
+        bf += '\t! FIRSTSTEP is True for first step starting from the Data file (so at T0) or Snapshot file.\n' \
               '\t! This part is outside the check if the model sampling time has been reached, by prevention.\n' \
               '\t! -> We need to check if TIME .GE. Next_t_model is called when starting from snapshot.\n' \
-              '\tIF ( FIRSTSTEP ) THEN\n' \
+              '\tIF (FIRSTSTEP) THEN\n' \
               '\t\tN_INSTANCE = N_INSTANCE + 1\n' \
-              '\t\tretval = Model_FirstCall(pInstance)\n' \
-              '\t\tcall Handle_Message(pInstance, retval)\n\n' \
-              '\t\t! Model_CheckParameters must be called just after Model_FirstCall\n' \
-              '\t\tretval = Model_CheckParameters(pInstance)\n' \
-              '\t\tcall Handle_Message(pInstance, retval)\n' \
+              '\t\tFirst_Step_Model = .TRUE.\n' \
               '\tENDIF\n\n' \
               '\t! Check if the model sampling time has been reached\n' \
               '\tDO WHILE ( TIME .GE. Next_t_model - EQUALITY_PRECISION )\n\n' \
@@ -1431,6 +1440,19 @@ class Application(tk.Tk):
         bf += inputs_pscad_to_new_struct
 
         bf += '\t\tENDIF\n\n' \
+              '\t\t! Use First_Step_Model instead of FIRSTSTEP because FIRSTSTEP from snapshot may not fall on a model time step\n' \
+              '\t\t! First_Step_Model is True from the Data file or Snapshot file, if this is the first time model sampling time has been reached\n' \
+              '\t\tIF (First_Step_Model) THEN\n' \
+              '\t\t\tretval = Model_FirstCall(pInstance)\n' \
+              '\t\t\tcall Handle_Message(pInstance, retval)\n' \
+              '\t\t\tFirst_Step_Model = .FALSE.\n' \
+              '\t\tENDIF\n\n' \
+              '\t\t! Model_CheckParameters is done only at t0 (to be called every time parameter values are modified in a future version, with GUI option)\n' \
+              '\t\t! Model_CheckParameters must be called just after Model_FirstCall\n' \
+              '\t\tIF (TIMEZERO) THEN\n' \
+              '\t\t\tretval = Model_CheckParameters(pInstance)\n' \
+              '\t\t\tcall Handle_Message(pInstance, retval)\n' \
+              '\t\tENDIF\n\n' \
               '\t\t! Check if the model must be initialized\n' \
               '\t\tIF (TIMEZERO .OR. (TIME .LE. TRelease)) THEN\n' \
               '\t\t\t! assign initial values to model outputs provided through the component mask\n'
@@ -1451,6 +1473,8 @@ class Application(tk.Tk):
               '\t\tcall Handle_Message(pInstance, retval)\n\n' \
               '\t\tNext_t_model = Next_t_model + DELT_Model  ! Next_t_model indicates when the model will be called\n' \
               '\tEND DO\n\n' \
+              '\t! Put back into STORI\n' \
+              '\tSTORI(idx_start_first_step_model) = merge(1, 0, First_Step_Model) ! 1 if TRUE, 0 else\n\n' \
               '\t! --------------------------------\n' \
               '\t! Put back into STORF\n' \
               '\t! --------------------------------\n' \
@@ -1459,7 +1483,7 @@ class Application(tk.Tk):
 
         if self.Model_Info.NumIntStates > 0:
             bf += '\tDO i = 1, ' + str(self.Model_Info.NumIntStates) + '\n'
-            bf += '\t\tSTORI(NSTORI + i - 1) = STATEI(i)\n'
+            bf += '\t\tSTORI(idx_start_statei + i - 1) = STATEI(i)\n'
             bf += '\tEND DO\n'
         if self.Model_Info.NumFloatStates > 0:
             bf += '\tDO i = 1, ' + str(self.Model_Info.NumFloatStates) + '\n'
@@ -1512,11 +1536,13 @@ class Application(tk.Tk):
               '\t! Increment STORx pointers (this must be done every time step)\n' \
               '\t! Note memory for these vectors must be allocated using #STORAGE syntax in the PSCAD component definition\n'
 
-        NumIntStates = self.Model_Info.NumIntStates
-        if NumIntStates > 0:
-            bf += '\tNSTORI = NSTORI + ' + str(NumIntStates) + ' ! # of integer states used in the dll\n'
+        # NumIntStates = self.Model_Info.NumIntStates
+        # if NumIntStates > 0:
+        #     bf += '\tNSTORI = NSTORI + ' + str(NumIntStates) + ' ! # of integer states used in the dll\n'
 
-        bf += '\tNSTORF = idx_start_next_model\n\n'
+        bf += '\tNSTORI = idx_start_next_model_stori\n\n'
+
+        bf += '\tNSTORF = idx_start_next_model_storf\n\n'
         bf += '\tEND\n\n'
 
         return bf
@@ -1869,9 +1895,14 @@ class Application(tk.Tk):
         ##################################################################################
 
         script = ''
+
+        # NumIntStates = self.Model_Info.NumIntStates
+        # if NumIntStates > 0:
+        #     script += '\t#STORAGE INTEGER:' + str(NumIntStates) + '\n'
+
         NumIntStates = self.Model_Info.NumIntStates
-        if NumIntStates > 0:
-            script += '\t#STORAGE INTEGER:' + str(NumIntStates) + '\n'
+        storage_integer = 1 + NumIntStates  # 1 for First_Step_Model parameter
+        script += '\t#STORAGE INTEGER:' + str(storage_integer) + '\n'
 
         NumFloatStates = self.Model_Info.NumFloatStates
         NumDoubleStates = self.Model_Info.NumDoubleStates
