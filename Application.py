@@ -1274,7 +1274,10 @@ class Application(tk.Tk):
               '\tINTEGER :: idx_start_outputs  ! STORF start index to store outputs\n' \
               '\tINTEGER :: idx_start_prev_t  ! STORF start index to store Prev_t_pscad\n' \
               '\tINTEGER :: idx_start_inputs  ! STORF start index to store inputs\n' \
-              '\tINTEGER :: idx_start_next_model_storf  ! STORF start index for the next model\n\n' \
+              '\tINTEGER :: idx_start_next_model_storf  ! STORF start index for the next model\n' \
+              '\tINTEGER :: idx_start_first_step_model  ! STORI start index for First_Step_Model\n' \
+              '\tINTEGER :: idx_start_statei  ! STORI start index to store integer state variables\n' \
+              '\tINTEGER :: idx_start_next_model_stori  ! STORI start index for the next model\n\n' \
               '\t! --------------------------------\n' \
               '\t! First, load the DLL and its functions and check static information. Do this only once\n' \
               '\t! --------------------------------\n' \
@@ -1408,15 +1411,15 @@ class Application(tk.Tk):
         bf += params_pscad_to_new_struct + '\n'
 
         bf += '\t! FIRSTSTEP is True for first step starting from the Data file (so at T0) or Snapshot file.\n' \
-              '\t! This part is outside the check if the model sampling time has been reached, by prevention.\n' \
-              '\t! -> We need to check if TIME .GE. Next_t_model is called when starting from snapshot.\n' \
               '\tIF (FIRSTSTEP) THEN\n' \
               '\t\tN_INSTANCE = N_INSTANCE + 1\n' \
               '\t\tFirst_Step_Model = .TRUE.\n' \
               '\tENDIF\n\n' \
               '\t! Check if the model sampling time has been reached\n' \
+              '\t! True at T0\n' \
               '\tDO WHILE ( TIME .GE. Next_t_model - EQUALITY_PRECISION )\n\n' \
               '\t\t! assign inputs from the simulation tool side to model inputs\n' \
+              '\t\t! Done before Model_FirstCall because this function may use the input values\n' \
               '\t\tIF (Use_Interpolation .AND. .NOT. TIMEZERO) THEN\n' \
               '\t\t\tdelta_t1 = TIME - Prev_t_pscad\n' \
               '\t\t\tdelta_t2 = Next_t_model - Prev_t_pscad\n\n' \
