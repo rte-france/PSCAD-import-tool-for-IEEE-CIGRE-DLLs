@@ -1,1 +1,2 @@
 mhi-pscad
+pyinstaller

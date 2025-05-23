@@ -1821,6 +1821,10 @@ class Application(tk.Tk):
                                          minimum=param_min_value, maximum=param_max_value, group=param_group_name)
                 # See https://www.pscad.com/webhelp-v502-ol/PSCAD/Component_Design/Parameters_Section/Parameter_Form/Input_Field.htm
                 # for 'Literal', 'Constant' or 'Variable' contents
+                # PSCAD Support : We appear to have missed this in the implementation of the Automation Library. A bug has been created to put this into the next release. For now there is a workaround for you.
+                # ex:
+                # gain = config.real('Gain', description="Gain factor")
+                # gain._set_attr('.', 'content_type', 'Constant', str)       # Or 'Variable' or 'Literal'
                 if param_fixedValue == 0:
                     p._set_attr('.', 'content_type', 'Variable', str)  # 'Literal', 'Constant' or 'Variable'
                 else:
