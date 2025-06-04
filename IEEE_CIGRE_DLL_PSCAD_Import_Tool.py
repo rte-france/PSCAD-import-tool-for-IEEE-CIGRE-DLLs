@@ -1,3 +1,12 @@
+# Copyright (c) [2025], RTE (https://www.rte-france.com)
+#
+# See AUTHORS.txt
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This file is part of PSCAD import tool for IEEE/CIGRE DLLs,
+# Tool for importing a DLL in IEEE CIGRE format into PSCAD 5.X software.
+
 from Application import Application
 import sys
 import os
@@ -11,7 +20,7 @@ if __name__ == '__main__':
     os.chdir(application_path)
 
     # Application inherits from the class tk.Tk (tkinter)
-    num_version = '2.5'
+    num_version = '2.6'
     app = Application(num_version)
     app.start()
     #app.title("PSCAD Import Tool (v" + num_version + ") of an IEEE/Cigre DLL format")
