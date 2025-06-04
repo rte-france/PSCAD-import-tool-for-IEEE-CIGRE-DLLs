@@ -72,3 +72,7 @@ Notes:
 ## References
 
 CIGRE TB958 JWG CIGRE B4.82/IEEE, «Guidelines for use of real-code in EMT models for HVDC, FACTs and inverter based generators in power systems analysis,» 2025.
+
+## DOI
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15593233.svg)](https://doi.org/10.5281/zenodo.15593233)
