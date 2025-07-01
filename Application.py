@@ -393,6 +393,7 @@ class Application(tk.Tk):
 
             # Create wrapper code and write it to the Fortran file
             self.fill_in_out_param_lists()
+
             buffer = self.create_fortran_code()
             with open(self.fortran_interface_file_path, 'w') as f:
                 f.write(buffer)  # allow rewrite on existing file
@@ -410,17 +411,34 @@ class Application(tk.Tk):
             #self.display_error(repr(e))  # contains Exception in the message...
             self.display_error(str(e))
 
-    def remove_forbidden_char(self, str):
-        str = str.replace(' ', '_')
-        return str
+    def remove_forbidden_char(self, name):
+        name = name.replace(' ', '_')
+        return name
+
+    # Keep max 31 characters (the PSCAD limit for signal names)
+    def shorten_if_limit_exceeded(self, name, counter_for_long_names):
+        if len(name) <= 31:
+            return name, counter_for_long_names
+
+        counter_for_long_names += 1
+        if counter_for_long_names < 10:
+            base = name[:29]
+        else:
+            base = name[:28]
+
+        return base + '_' + str(counter_for_long_names), counter_for_long_names
 
     def fill_in_out_param_lists(self):
+        # Used to add _1 _2 etc. for signal names (I/O) with 32 char or more (PSCAD limit is 31)
+        # Parameter names are not limited
+        counter_for_long_names = 0
         for i in range(0, self.Model_Info.NumInputPorts):
             signal = self.Model_Info.InputPortsInfo[i]
             if signal.Name is None:
                 raise Exception('One of the inputs has no Name, it is forbidden')
             name = signal.Name.decode("utf-8")
             name = self.remove_forbidden_char(name)
+            name, counter_for_long_names = self.shorten_if_limit_exceeded(name, counter_for_long_names)
             datatype = signal.DataType  # ex: IEEE_Cigre_DLLInterface_DataType_int8_T
             if datatype is None:
                 raise Exception('One of the inputs has no DataType, it is forbidden')
@@ -444,6 +462,7 @@ class Application(tk.Tk):
                 raise Exception('One of the outputs has no Name, it is forbidden')
             name = signal.Name.decode("utf-8")
             name = self.remove_forbidden_char(name)
+            name, counter_for_long_names = self.shorten_if_limit_exceeded(name, counter_for_long_names)
             if signal.Unit is None:
                 unit = ''
             else:
@@ -521,6 +540,10 @@ class Application(tk.Tk):
             self.param_default_values.append(default_value)
             self.param_min_values.append(min_value)
             self.param_max_values.append(max_value)
+
+        if counter_for_long_names > 0:
+            self.display_info('Some input or output names have been shortened because the maximum number of signal'
+                              ' characters is 31 in PSCAD')
 
         self.nb_inputs_total = sum(self.in_width)
         self.nb_outputs_total = sum(self.out_width)
