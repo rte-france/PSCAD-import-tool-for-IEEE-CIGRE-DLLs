@@ -92,6 +92,14 @@ class Application(tk.Tk):
         self.out_pscad_types = []  # INTEGER or REAL
         self.out_width = []
 
+        # vectors are flattened for output init parameters
+        # ex if out2 width is 2: ['out1_init', 'out2_1_init', 'out2_2_init', etc.]
+        self.out_init_names = []
+        self.out_init_units = []
+        self.out_init_fortran_types = []  # unused
+        self.out_init_pscad_types = []  # INTEGER or REAL
+        self.out_init_width = []
+
         self.param_names = []
         self.param_fortran_types = []
         self.param_pscad_types = []  # For an IEEE CIGRE DLL, it can be INTEGER, REAL or CHARACTER(*)
@@ -354,6 +362,12 @@ class Application(tk.Tk):
         self.out_pscad_types = []
         self.out_width = []
 
+        self.out_init_names = []
+        self.out_init_units = []
+        self.out_init_fortran_types = []
+        self.out_init_pscad_types = []
+        self.out_init_width = []
+
         self.param_names = []
         self.param_fortran_types = []
         self.param_pscad_types = []
@@ -541,6 +555,19 @@ class Application(tk.Tk):
             self.param_min_values.append(min_value)
             self.param_max_values.append(max_value)
 
+        # Fill out_init parameters
+        for i in range(len(self.out_names)):
+            for j in range(self.out_width[i]):
+                ext = ''
+                if self.out_width[i] > 1:
+                    ext = '_' + str(j + 1)
+                self.out_init_names.append(self.out_names[i] + ext + '_init')
+
+                self.out_init_units.append(self.out_units[i])
+                self.out_init_fortran_types.append(self.out_fortran_types[i])
+                self.out_init_pscad_types.append(self.out_pscad_types[i])
+                self.out_init_width.append(1)  # out_init is flattened so width = 1 for each element
+
         if counter_for_long_names > 0:
             self.display_info('Some input or output names have been shortened because the maximum number of signal'
                               ' characters is 31 in PSCAD')
@@ -622,8 +649,10 @@ class Application(tk.Tk):
             buffer += name + '_pscad, '
         for name in self.out_names:
             buffer += name + '_pscad, '
-        for name in self.out_names:
-            buffer += name + '_init_pscad, '
+        #for name in self.out_names:
+        #    buffer += name + '_init_pscad, '
+        for name in self.out_init_names:
+            buffer += name + '_pscad, '
 
         buffer += 'TRelease, DLL_Path, Use_Interpolation)'
 
@@ -635,8 +664,9 @@ class Application(tk.Tk):
         buffer += '\n'
         buffer += self.generate_variables_declaration('IN', self.param_names, '_pscad', self.param_pscad_types, None)
         buffer += '\n'
-        out_init_names = [x + '_init' for x in self.out_names]
-        buffer += self.generate_variables_declaration('IN', out_init_names, '_pscad', self.out_pscad_types, self.out_width)
+        #out_init_names = [x + '_init' for x in self.out_names]
+        #buffer += self.generate_variables_declaration('IN', out_init_names, '_pscad', self.out_pscad_types, self.out_width)
+        buffer += self.generate_variables_declaration('IN', self.out_init_names, '_pscad', self.out_init_pscad_types, self.out_init_width)
         buffer += '\n'
         buffer += self.generate_variables_declaration('OUT', self.out_names, '_pscad', self.out_pscad_types, self.out_width)
         return buffer
@@ -782,11 +812,64 @@ class Application(tk.Tk):
                     part_1 = part_1_base + '(' + str(j) + ')'
 
                 if suffix is None:  # use STORF
-                    """if self.Model_Info.NumDoubleStates > 0:
-                        part_2 = 'STORF(NSTORF + 2 + ' + str(i_storf) + ')'
-                    else:
-                        part_2 = 'STORF(NSTORF + 1 + ' + str(i_storf) + ')'"""
+                    part_2 = 'STORF(idx_start_outputs + ' + str(i_storf) + ')'
+                    i_storf += 1
 
+                    if fill_new_struct:  # STORF on the right side
+                        type_from = 'DOUBLE PRECISION'  # REAL*8
+                        type_to = fortran_type
+                    else:
+                        type_from = fortran_type
+                        type_to = 'DOUBLE PRECISION'
+                else:
+                    if width == 1:
+                        part_2 = name + suffix
+                    else:  # width > 1
+                        if suffix == '_init_pscad':  # specific for out_init that is flattened
+                            part_2 = name + '_' + str(j) + suffix
+                        else:
+                            part_2 = name + suffix + '(' + str(j) + ')'
+
+                    if fill_new_struct:
+                        type_from = pscad_type
+                        type_to = fortran_type
+                    else:
+                        type_from = fortran_type
+                        type_to = pscad_type
+
+                conversion_part_1, conversion_part_2 = self.get_conversion(type_from, type_to)
+
+                if fill_new_struct:
+                    buffer += '\t' + part_1 + ' = ' + conversion_part_1 + part_2 + conversion_part_2
+                else:
+                    buffer += '\t' + part_2 + ' = ' + conversion_part_1 + part_1 + conversion_part_2
+
+                buffer += '\n'
+
+        return buffer
+
+    """def generate_conversion(self, names, widths, fortran_types, pscad_types, suffix, fill_new_struct, new_struct):
+        buffer = ''
+        # width_sum = sum(widths)
+        i_storf = 0
+        for i in range(0, len(names)):
+            if widths is not None:
+                width = widths[i]
+            else:
+                width = 1
+            name = names[i]
+            pscad_type = pscad_types[i]
+            fortran_type = fortran_types[i]
+
+            part_1_base = new_struct + '%' + name  # ex: INPUTS_new%in_1
+
+            for j in range(1, width + 1):  # work also if width == 1
+                if width == 1:
+                    part_1 = part_1_base
+                else:
+                    part_1 = part_1_base + '(' + str(j) + ')'
+
+                if suffix is None:  # use STORF
                     part_2 = 'STORF(idx_start_outputs + ' + str(i_storf) + ')'
                     i_storf += 1
 
@@ -817,7 +900,7 @@ class Application(tk.Tk):
 
                 buffer += '\n'
 
-        return buffer
+        return buffer"""
 
     def generate_storf_to_prev_inputs(self):
         buffer = ''
@@ -1882,7 +1965,54 @@ class Application(tk.Tk):
                                     value='0 [sec]', minimum=0, maximum=1E+308, units='sec')
         p._set_attr('.', 'content_type', 'Constant', str)
 
-        for i in range(len(self.out_names)):
+        for i in range(len(self.out_init_names)):
+            out_init_name = self.out_init_names[i]
+            out_init_unit = self.out_init_units[i]
+            out_init_pscad_type = self.out_init_pscad_types[i]
+            p_description = out_init_name + ' - Initial output value'
+            if out_init_unit != '':
+                p_value = '0 [' + out_init_unit + ']'
+            else:
+                p_value = 0
+
+            if out_init_pscad_type == 'INTEGER':
+                p = initial_conditions.integer(out_init_name, description=p_description, value=p_value)
+            elif out_init_pscad_type == 'REAL':
+                p = initial_conditions.real(out_init_name, description=p_description, value=p_value)
+            else:
+                raise Exception('Unknown PSCAD type for output init: ' + out_init_name)
+            p._set_attr('.', 'content_type', 'Constant', str)
+
+        """for i in range(len(self.out_names)):
+
+            for j in range(self.out_width[i]):
+
+                ext = ''
+                if self.out_width[i] > 1:
+                    ext = '_' + str(j+1)
+
+                out_name = self.out_names[i]
+                out_unit = self.out_units[i]
+                # param_default_value = self.param_default_values[i]
+
+                out_pscad_type = self.out_pscad_types[i]  # INTEGER or REAL
+                p_name = out_name + ext + '_init'
+                p_description = p_name + ' - Initial value of the output: ' + out_name
+
+                if out_unit != '':
+                    p_value = '0 [' + out_unit + ']'
+                else:
+                    p_value = 0
+
+                if out_pscad_type == 'INTEGER':
+                    p = initial_conditions.integer(p_name, description=p_description, value=p_value)
+                elif out_pscad_type == 'REAL':
+                    p = initial_conditions.real(p_name, description=p_description, value=p_value)
+                else:
+                    raise Exception('Unknown PSCAD type for output: ' + out_name)
+                p._set_attr('.', 'content_type', 'Constant', str)"""
+
+        """for i in range(len(self.out_names)):
             out_name = self.out_names[i]
             out_unit = self.out_units[i]
             # param_default_value = self.param_default_values[i]
@@ -1902,7 +2032,7 @@ class Application(tk.Tk):
                 p = initial_conditions.real(p_name, description=p_description, value=p_value)
             else:
                 raise Exception('Unknown PSCAD type for output: ' + out_name)
-            p._set_attr('.', 'content_type', 'Constant', str)
+            p._set_attr('.', 'content_type', 'Constant', str)"""
 
         # is not read only
         wizard.form_width = 600
@@ -1960,8 +2090,7 @@ class Application(tk.Tk):
         for name in self.out_names:
             script += '$' + name + ', '
 
-        out_init_names = [x + '_init' for x in self.out_names]
-        for name in out_init_names:
+        for name in self.out_init_names:
             script += '$' + name + ', '
 
         script += '$TRelease, "$DLL_Path", $Use_Interpolation)'
