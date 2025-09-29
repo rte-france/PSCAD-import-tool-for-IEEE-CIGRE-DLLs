@@ -642,6 +642,35 @@ class Application(tk.Tk):
 
     def generate_finterface_function_prototype(self):
         buffer = ''
+        buffer += '\tSUBROUTINE ' + self.Model_Name_Shortened + '_FINTERFACE_PSCAD(&\n'
+
+        args = []
+
+        for name in self.in_names:
+            args.append(name + "_pscad")
+        for name in self.param_names:
+            args.append(name + "_pscad")
+        for name in self.out_names:
+            args.append(name + "_pscad")
+        for name in self.out_init_names:
+            args.append(name + "_pscad")
+
+        args += ["TRelease", "DLL_Path", "Use_Interpolation"]
+
+        # Split the list into several lines (for example 5 arguments max per line)
+        max_per_line = 5
+        for i in range(0, len(args), max_per_line):
+            line = args[i:i + max_per_line]
+            buffer += "\t    " + ", ".join(line)
+            if i + max_per_line < len(args):
+                buffer += ", &\n"
+            else:
+                buffer += ")\n"
+
+        return buffer
+
+    """def generate_finterface_function_prototype(self):
+        buffer = ''
         buffer += '\tSUBROUTINE ' + self.Model_Name_Shortened + '_FINTERFACE_PSCAD('
         for name in self.in_names:
             buffer += name + '_pscad, '
@@ -656,7 +685,7 @@ class Application(tk.Tk):
 
         buffer += 'TRelease, DLL_Path, Use_Interpolation)'
 
-        return buffer
+        return buffer"""
 
     def generate_variables_from_pscad(self):
         buffer = ''
@@ -2082,6 +2111,8 @@ class Application(tk.Tk):
         script += '\t#STORAGE REAL:' + str(storage_double) + '\n'
         script += '\n'
 
+        # Do not split args into several lines for the script part.
+        # This will be done automatically by PSCAD when it generates Main.f
         script += '\tCALL ' + self.Model_Name_Shortened + '_FINTERFACE_PSCAD('
         for name in self.in_names:
             script += '$' + name + ', '
