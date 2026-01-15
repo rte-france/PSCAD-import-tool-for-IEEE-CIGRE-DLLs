@@ -2106,13 +2106,14 @@ class Application(tk.Tk):
         #     script += '\t#STORAGE INTEGER:' + str(NumIntStates) + '\n'
 
         NumIntStates = self.Model_Info.NumIntStates
-        storage_integer = 1 + NumIntStates  # 1 for First_Step_Model parameter
+        # Step_Count_Model + First_Step_Model + NumIntStates
+        storage_integer = 1 + 1 + NumIntStates
         script += '\t#STORAGE INTEGER:' + str(storage_integer) + '\n'
 
         NumFloatStates = self.Model_Info.NumFloatStates
         NumDoubleStates = self.Model_Info.NumDoubleStates
-        # next_t_model + NumFloatStates + NumDoubleStates + nb_outputs_total + Prev_t_pscad + nb_inputs_total
-        storage_double = 1 + NumFloatStates + NumDoubleStates + self.nb_outputs_total + 1 + self.nb_inputs_total
+        # NumFloatStates + NumDoubleStates + nb_outputs_total + Prev_t_pscad + nb_inputs_total
+        storage_double = NumFloatStates + NumDoubleStates + self.nb_outputs_total + 1 + self.nb_inputs_total
         script += '\t#STORAGE REAL:' + str(storage_double) + '\n'
         script += '\n'
 
