@@ -1386,6 +1386,7 @@ class Application(tk.Tk):
               '\tINTEGER   :: retValFreeLib     ! Only for FreeLibrary\n' \
               '\tTYPE(IEEE_Cigre_DLLInterface_Instance) :: pInstance\n' \
               '\tDOUBLE PRECISION :: Next_t_model ! To know when to call model output function\n' \
+              '\tINTEGER :: Step_Count_Model ! Counter to calculate Next_t_model without numerical drift\n' \
               '\tLOGICAL   :: First_Step_Model ! To know the first time model sampling time has been reached\n' \
               '\tTYPE(c_ptr)                                           :: Model_Info_cp ! The C pointer of Model_GetInfo\n' \
               '\tTYPE(IEEE_Cigre_DLLInterface_Model_Info), POINTER     :: Model_Info_fp ! The F pointer of Model_GetInfo\n' \
@@ -1414,7 +1415,6 @@ class Application(tk.Tk):
 
         bf += self.generate_variables_declaration('', self.in_names, '_pscad_prev', self.in_pscad_types, self.in_width)
         bf += '\n' \
-              '\tINTEGER :: idx_start_next_t_model  ! STORF start index to store Next_t_model\n' \
               '\tINTEGER :: idx_start_statef  ! STORF start index to store float state variables\n' \
               '\tINTEGER :: idx_start_stated  ! STORF start index to store double state variables\n' \
               '\tINTEGER :: idx_start_outputs  ! STORF start index to store outputs\n' \
@@ -1423,6 +1423,7 @@ class Application(tk.Tk):
               '\tINTEGER :: idx_start_next_model_storf  ! STORF start index for the next model\n' \
               '\tINTEGER :: idx_start_first_step_model  ! STORI start index for First_Step_Model\n' \
               '\tINTEGER :: idx_start_statei  ! STORI start index to store integer state variables\n' \
+              '\tINTEGER :: idx_start_step_count_model  ! STORI start index to store Step_Count_Model\n' \
               '\tINTEGER :: idx_start_next_model_stori  ! STORI start index for the next model\n\n' \
               '\t! --------------------------------\n' \
               '\t! First, load the DLL and its functions and check static information. Do this only once\n' \
@@ -1475,8 +1476,7 @@ class Application(tk.Tk):
         bf += '\t! --------------------------------\n' \
               '\t! Initialize STORF start indexes\n' \
               '\t! --------------------------------\n' \
-              '\tidx_start_next_t_model = NSTORF\n' \
-              '\tidx_start_statef = idx_start_next_t_model + 1\n' \
+              '\tidx_start_statef = NSTORF\n' \
               '\tidx_start_stated = idx_start_statef + ' + str(self.Model_Info.NumFloatStates) + '\n' \
               '\tidx_start_outputs = idx_start_stated + ' + str(self.Model_Info.NumDoubleStates) + '\n' \
               '\tidx_start_prev_t = idx_start_outputs + ' + str(self.nb_outputs_total) + '\n' \
@@ -1486,8 +1486,9 @@ class Application(tk.Tk):
               '\t! Initialize STORI start indexes\n' \
               '\t! --------------------------------\n' \
               '\tidx_start_first_step_model = NSTORI\n' \
-              '\tidx_start_statei = NSTORI + 1\n' \
-              '\tidx_start_next_model_stori = idx_start_statei + ' + str(self.Model_Info.NumIntStates) + '\n\n' \
+              '\tidx_start_statei = idx_start_first_step_model + 1\n' \
+              '\tidx_start_step_count_model = idx_start_statei + ' + str(self.Model_Info.NumIntStates) + '\n' \
+              '\tidx_start_next_model_stori = idx_start_step_count_model + 1\n\n' \
               '\t! --------------------------------\n' \
               '\t! Set pointers\n' \
               '\t! --------------------------------\n' \
@@ -1508,17 +1509,19 @@ class Application(tk.Tk):
               '\t! --------------------------------\n' \
               '\t! Get saved values from STORI\n' \
               '\t! --------------------------------\n' \
-              '\tFirst_Step_Model = (STORI(idx_start_first_step_model) /= 0)  ! TRUE if not equal to 0\n'
+              '\tFirst_Step_Model = (STORI(idx_start_first_step_model) /= 0)  ! TRUE if not equal to 0\n' \
+              '\tStep_Count_Model = STORI(idx_start_step_count_model)\n'
+
+        bf += '\n' \
+              '\tIF (TIMEZERO) THEN\n' \
+              '\t\tStep_Count_Model = 0\n' \
+              '\tENDIF\n' \
+              '\tNext_t_model = Step_Count_Model * DELT_Model\n' \
 
         bf += '\n' \
               '\t! --------------------------------\n' \
               '\t! Get saved values from STORF\n' \
               '\t! --------------------------------\n' \
-              '\t! Get Next_t_model from STORF\n' \
-              '\tNext_t_model = STORF(idx_start_next_t_model)\n' \
-              '\tIF (TIMEZERO) THEN\n' \
-              '\t\tNext_t_model = 0\n' \
-              '\tENDIF\n' \
               '\t! Get state values from STORF\n'
 
         if self.Model_Info.NumIntStates > 0:
@@ -1620,14 +1623,15 @@ class Application(tk.Tk):
               '\t\t! Call ModelOutputs function every DELT_Model sampling time\n' \
               '\t\tretval = Model_Outputs(pInstance)\n' \
               '\t\tcall Handle_Message(pInstance, retval)\n\n' \
-              '\t\tNext_t_model = Next_t_model + DELT_Model  ! Next_t_model indicates when the model will be called\n' \
+              '\t\t! Next_t_model = Next_t_model + DELT_Model  ! This method can create a digital drift for Next_t_model\n' \
+              '\t\tStep_Count_Model = Step_Count_Model + 1\n' \
+              '\t\tNext_t_model = Step_Count_Model * DELT_Model\n' \
               '\tEND DO\n\n' \
+              '\t! --------------------------------\n' \
               '\t! Put back into STORI\n' \
-              '\tSTORI(idx_start_first_step_model) = merge(1, 0, First_Step_Model) ! 1 if TRUE, 0 else\n\n' \
               '\t! --------------------------------\n' \
-              '\t! Put back into STORF\n' \
-              '\t! --------------------------------\n' \
-              '\tSTORF(idx_start_next_t_model) = Next_t_model\n' \
+              '\tSTORI(idx_start_first_step_model) = merge(1, 0, First_Step_Model) ! 1 if TRUE, 0 else\n' \
+              '\tSTORI(idx_start_step_count_model) = Step_Count_Model\n\n' \
               '\t! Copy values from STATEx to STORx\n'
 
         if self.Model_Info.NumIntStates > 0:
@@ -1643,6 +1647,7 @@ class Application(tk.Tk):
             bf += '\t\tSTORF(idx_start_stated + i - 1) = STATED(i)\n'
             bf += '\tEND DO\n'
 
+        bf += '\n'
         bf += '\t! Outputs into STORF\n'
 
         outputs_new_to_storf = self.generate_conversion(self.out_names, self.out_width, self.out_fortran_types,

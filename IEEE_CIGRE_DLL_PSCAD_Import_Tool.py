@@ -20,7 +20,7 @@ if __name__ == '__main__':
     os.chdir(application_path)
 
     # Application inherits from the class tk.Tk (tkinter)
-    num_version = '2.8'
+    num_version = '2.9'
     app = Application(num_version)
     app.start()
     #app.title("PSCAD Import Tool (v" + num_version + ") of an IEEE/Cigre DLL format")
